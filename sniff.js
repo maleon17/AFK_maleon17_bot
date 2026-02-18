@@ -12,54 +12,61 @@ const client = mc.createClient({
 client.removeAllListeners('login_plugin_request')
 
 let requests = []
+let collecting = true
 
 client.on('login_plugin_request', (packet) => {
     let innerChannel = ''
-    let innerHex = ''
     
     if (packet.data) {
         const nameLen = packet.data[0]
         innerChannel = packet.data.slice(1, 1 + nameLen).toString('utf8')
-        innerHex = packet.data.slice(1 + nameLen).toString('hex').substring(0, 60)
     }
 
-    requests.push({
-        id: packet.messageId,
-        inner: innerChannel,
-        hex: innerHex
-    })
+    console.log('#' + packet.messageId + ' ' + innerChannel)
 
-    console.log('#' + packet.messageId + ' ' + innerChannel + ' -> ' + innerHex)
+    if (collecting) {
+        requests.push(packet)
+    }
 })
 
+// Ждём все запросы, потом пробуем разные ответы
 setTimeout(() => {
-    console.log('\n=== Всего запросов: ' + requests.length + ' ===')
-    console.log('\nУникальные каналы:')
-    
-    const channels = {}
-    for (const r of requests) {
-        if (!channels[r.inner]) {
-            channels[r.inner] = { count: 0, firstHex: r.hex, firstId: r.id }
+    collecting = false
+    console.log('\nВсего: ' + requests.length + ' запросов')
+    console.log('Пробуем ответить acknowledgement на каждый...\n')
+
+    for (const packet of requests) {
+        let innerChannel = ''
+        if (packet.data) {
+            const nameLen = packet.data[0]
+            innerChannel = packet.data.slice(1, 1 + nameLen).toString('utf8')
         }
-        channels[r.inner].count++
-    }
-    
-    for (const [name, info] of Object.entries(channels)) {
-        console.log('  ' + name + ': ' + info.count + ' запросов, first id: ' + info.firstId)
-        console.log('    hex: ' + info.firstHex)
-    }
 
-    console.log('\nТеперь пробуем отвечать пустым на все...')
+        let response
 
-    for (const r of requests) {
-        const nameLen = Buffer.byteLength(r.inner)
-        const response = Buffer.alloc(nameLen + 2)
-        response[0] = nameLen
-        response.write(r.inner, 1)
-        response[1 + nameLen] = 0
+        if (innerChannel === 'fml:handshake') {
+            // FML3 acknowledgement: channel name + byte 0x63 (99 = acknowledgement)
+            const nameLen = Buffer.byteLength('fml:handshake')
+            response = Buffer.alloc(nameLen + 2)
+            response[0] = nameLen
+            response.write('fml:handshake', 1)
+            response[1 + nameLen] = 0x63
+        } else if (innerChannel === 'tacz:handshake') {
+            const nameLen = Buffer.byteLength('tacz:handshake')
+            response = Buffer.alloc(nameLen + 2)
+            response[0] = nameLen
+            response.write('tacz:handshake', 1)
+            response[1 + nameLen] = 0x01
+        } else if (innerChannel === 'tacztweaks:handshake') {
+            const nameLen = Buffer.byteLength('tacztweaks:handshake')
+            response = Buffer.alloc(nameLen + 2)
+            response[0] = nameLen
+            response.write('tacztweaks:handshake', 1)
+            response[1 + nameLen] = 0x01
+        }
 
         client.write('login_plugin_response', {
-            messageId: r.id,
+            messageId: packet.messageId,
             data: response
         })
     }
@@ -70,12 +77,12 @@ client.on('login', () => {
 })
 
 client.on('disconnect', (packet) => {
-    console.log('DISCONNECT:', JSON.stringify(packet).substring(0, 300))
+    console.log('DISCONNECT:', JSON.stringify(packet).substring(0, 500))
     process.exit()
 })
 
 client.on('kick_disconnect', (packet) => {
-    console.log('KICKED:', JSON.stringify(packet).substring(0, 300))
+    console.log('KICKED:', JSON.stringify(packet).substring(0, 500))
     process.exit()
 })
 
