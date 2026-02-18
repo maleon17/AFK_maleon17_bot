@@ -57,6 +57,7 @@ function makeWrappedResponse(channelName, payload) {
 }
 
 let requestNum = 0
+let pendingTacz = []
 
 client.on('login_plugin_request', (packet) => {
     let innerChannel = ''
@@ -78,8 +79,14 @@ client.on('login_plugin_request', (packet) => {
 
         console.log('  fml type=' + typeInfo.value)
 
+        // Сначала ответим на все ожидающие tacz
+        for (const p of pendingTacz) {
+            console.log('  -> deferred tacz echo (id: ' + p.messageId + ')')
+            client.write('login_plugin_response', { messageId: p.messageId, data: p.data })
+        }
+        pendingTacz = []
+
         if (typeInfo.value === 5) {
-            // S2CModList -> C2SModListReply (type=1)
             let offset = typeInfo.length
             const modCount = readVarInt(dataAfterLen, offset)
             offset += modCount.length
@@ -97,23 +104,25 @@ client.on('login_plugin_request', (packet) => {
 
             console.log('  Mods: ' + mods.length + ' -> C2SModListReply (type=1)')
 
-            // C2SModListReply: type(1) + modCount + modIds + channelCount(0) + registryCount(0)
             const parts = [writeVarInt(1), writeVarInt(mods.length)]
             for (const mod of mods) {
                 parts.push(writeString(mod))
             }
-            parts.push(writeVarInt(0)) // channels
-            parts.push(writeVarInt(0)) // registries
+            parts.push(writeVarInt(0))
+            parts.push(writeVarInt(0))
 
             const response = makeWrappedResponse('fml:handshake', Buffer.concat(parts))
             client.write('login_plugin_response', { messageId: packet.messageId, data: response })
 
         } else {
-            // Все остальные -> C2SAcknowledge (type=2)
             console.log('  -> C2SAcknowledge (type=2)')
             const response = makeWrappedResponse('fml:handshake', writeVarInt(2))
             client.write('login_plugin_response', { messageId: packet.messageId, data: response })
         }
+    } else if (innerChannel === 'tacz:handshake' && innerData.length <= 10) {
+        // Маленький tacz — откладываем
+        console.log('  -> deferred')
+        pendingTacz.push(packet)
     } else if (innerChannel === 'tacz:handshake' || innerChannel === 'tacztweaks:handshake') {
         console.log('  -> echo')
         client.write('login_plugin_response', { messageId: packet.messageId, data: packet.data })
@@ -125,6 +134,11 @@ client.on('login_plugin_request', (packet) => {
 
 client.on('login', () => {
     console.log('\n*** SUCCESS! ***')
+    // Отвечаем на оставшиеся tacz
+    for (const p of pendingTacz) {
+        client.write('login_plugin_response', { messageId: p.messageId, data: p.data })
+    }
+    pendingTacz = []
 })
 
 client.on('disconnect', (packet) => {
