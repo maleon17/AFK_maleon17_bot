@@ -67,6 +67,11 @@ client.on('login_plugin_request', (packet) => {
         const typeInfo = readVarInt(dataAfterLen, 0)
 
         console.log('  fml type=' + typeInfo.value)
+        
+        // Показываем данные после типа
+        const afterType = dataAfterLen.slice(typeInfo.length)
+        const preview = afterType.slice(0, 50).toString('utf8').replace(/[^\x20-\x7E]/g, '.')
+        console.log('  preview: ' + preview)
 
         if (typeInfo.value === 5) {
             let offset = typeInfo.length
@@ -84,9 +89,8 @@ client.on('login_plugin_request', (packet) => {
                 mods.push(modId.value)
             }
 
-            console.log('  Mods: ' + mods.length)
+            console.log('  Mods: ' + mods.length + ' -> ModListReply (type=5)')
 
-            // Внутренний payload: type(1) + modCount + modIds + channels(0) + registries(0)
             const replyParts = [writeVarInt(5), writeVarInt(mods.length)]
             for (const mod of mods) {
                 replyParts.push(writeString(mod))
@@ -95,7 +99,6 @@ client.on('login_plugin_request', (packet) => {
             replyParts.push(writeVarInt(0))
             const replyPayload = Buffer.concat(replyParts)
 
-            // Формат как у сервера: nameLen(1 byte) + name + varint(payloadLen) + payload
             const nameBuf = Buffer.from('fml:handshake')
             const response = Buffer.concat([
                 Buffer.from([nameBuf.length]),
@@ -104,23 +107,20 @@ client.on('login_plugin_request', (packet) => {
                 replyPayload
             ])
 
-            console.log('  -> ModListReply')
-            console.log('  server format: ' + packet.data.slice(0, 20).toString('hex'))
-            console.log('  our   format: ' + response.slice(0, 20).toString('hex'))
-
             client.write('login_plugin_response', { messageId: packet.messageId, data: response })
 
         } else {
-            // Ack: nameLen + name + varint(1) + type(2)
+            // Для type 1,2,3,4 — ack тем же типом
+            console.log('  -> Ack (type=' + typeInfo.value + ')')
+            
             const nameBuf = Buffer.from('fml:handshake')
-            const ackPayload = writeVarInt(2)
+            const ackPayload = writeVarInt(typeInfo.value)
             const response = Buffer.concat([
                 Buffer.from([nameBuf.length]),
                 nameBuf,
                 writeVarInt(ackPayload.length),
                 ackPayload
             ])
-            console.log('  -> Ack')
             client.write('login_plugin_response', { messageId: packet.messageId, data: response })
         }
     } else if (innerChannel === 'tacz:handshake' || innerChannel === 'tacztweaks:handshake') {
