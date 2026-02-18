@@ -1,5 +1,7 @@
 const mc = require('minecraft-protocol')
-const forgeHandshake = require('minecraft-protocol-forge').forgeHandshake
+const forge = require('minecraft-protocol-forge')
+console.log(Object.keys(forge))
+process.exit()
 
 let client = null
 let isRunning = false
