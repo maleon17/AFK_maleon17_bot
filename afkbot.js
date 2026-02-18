@@ -1,9 +1,8 @@
 const mineflayer = require('mineflayer')
-const { plugin: autoeat } = require('mineflayer-auto-eat')
 
 let bot = null
 let isRunning = false
-let sendLog = null // функция для отправки логов в ТГ
+let sendLog = null
 
 function startBot(verifyCallback, logCallback) {
     if (isRunning) return 'Бот уже на сервере'
@@ -11,14 +10,12 @@ function startBot(verifyCallback, logCallback) {
     sendLog = logCallback
 
     bot = mineflayer.createBot({
-        host: 'donator2.gamely.pro',
-        port: 30958,
+        host: 'IP_СЕРВЕРА',
+        port: 25565,
         username: 'maleon17',
         version: '1.20.1',
         auth: 'offline'
     })
-
-    bot.loadPlugin(autoeatPlugin)
 
     bot.on('login', () => {
         isRunning = true
@@ -26,11 +23,13 @@ function startBot(verifyCallback, logCallback) {
     })
 
     bot.on('spawn', () => {
-        bot.autoEat.options = {
-            priority: 'foodPoints',
-            startAt: 14,
-            bannedFood: []
-        }
+        // Проверяем голод каждые 10 секунд
+        setInterval(() => {
+            if (!isRunning || !bot) return
+            if (bot.food <= 14) {
+                eat()
+            }
+        }, 10000)
     })
 
     bot.on('message', (message) => {
@@ -73,6 +72,31 @@ function startBot(verifyCallback, logCallback) {
     })
 
     return '⏳ Подключаюсь к серверу...'
+}
+
+async function eat() {
+    if (!bot || !isRunning) return
+
+    const foods = [
+        'cooked_beef', 'cooked_porkchop', 'cooked_chicken',
+        'cooked_mutton', 'cooked_salmon', 'cooked_cod',
+        'bread', 'golden_carrot', 'golden_apple',
+        'apple', 'baked_potato', 'beetroot',
+        'carrot', 'melon_slice', 'sweet_berries'
+    ]
+
+    for (const foodName of foods) {
+        const food = bot.inventory.items().find(item => item.name === foodName)
+        if (food) {
+            try {
+                await bot.equip(food, 'hand')
+                await bot.consume()
+            } catch (e) {
+                // не удалось поесть
+            }
+            return
+        }
+    }
 }
 
 function stopBot() {
