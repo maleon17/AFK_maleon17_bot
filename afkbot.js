@@ -1,5 +1,5 @@
 const mc = require('minecraft-protocol')
-require('minecraft-protocol-forge')(mc)
+const forgeHandshake = require('minecraft-protocol-forge').forgeHandshake
 
 let client = null
 let isRunning = false
