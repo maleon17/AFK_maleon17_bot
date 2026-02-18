@@ -1,25 +1,32 @@
 const TeleBot = require('telebot')
 const { startBot, stopBot, sendVerify, getStatus } = require('./afkbot')
 
-const TELEGRAM_TOKEN = 'ТОКЕН_НОВОГО_БОТА'
-const ADMIN_ID = 8480261623  // твой Telegram ID
+const TELEGRAM_TOKEN = '8569269930:AAG4WEPomwxNbWrxiIeqZZEkUjv5c6DKA9g'
+const ADMIN_ID = 8480261623
 
 const tbot = new TeleBot(TELEGRAM_TOKEN)
 
-// Проверка админа
 function isAdmin(msg) {
     return msg.from.id === ADMIN_ID
+}
+
+function log(text) {
+    tbot.sendMessage(ADMIN_ID, text).catch(() => {})
 }
 
 tbot.on('/join', (msg) => {
     if (!isAdmin(msg)) return
 
-    const result = startBot((text) => {
-        // Когда сервер просит верификацию
-        tbot.sendMessage(ADMIN_ID,
-            `🔐 Нужна верификация!\n\n${text}\n\nОтправь код: /code XXXXXX`
-        )
-    })
+    const result = startBot(
+        // Верификация
+        (text) => {
+            log(`🔐 Нужна верификация!\n\n${text}\n\nОтправь код: /code XXXXXX`)
+        },
+        // Логи
+        (text) => {
+            log(text)
+        }
+    )
 
     return msg.reply.text(result)
 })
@@ -41,8 +48,8 @@ tbot.on('/code', (msg) => {
 tbot.on('/status', (msg) => {
     if (!isAdmin(msg)) return
     const result = getStatus()
-    return msg.reply.text(`📡 Статус бота:\n${result}`)
+    return msg.reply.text(`📡 Статус:\n${result}`)
 })
 
-console.log('🤖 Telegram бот запущен')
+log('🤖 AFK бот запущен')
 tbot.start()
