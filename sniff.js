@@ -57,7 +57,6 @@ function makeWrappedResponse(channelName, payload) {
 }
 
 let requestNum = 0
-let serverMods = []
 
 client.on('login_plugin_request', (packet) => {
     let innerChannel = ''
@@ -79,12 +78,12 @@ client.on('login_plugin_request', (packet) => {
         console.log('#' + packet.messageId + ' fml type=' + typeInfo.value + ' len=' + lenInfo.value)
 
         if (typeInfo.value === 5) {
-            // ModList — парсим
+            // ModList
             let offset = typeInfo.length
             const modCount = readVarInt(dataAfterLen, offset)
             offset += modCount.length
 
-            serverMods = []
+            const mods = []
             for (let i = 0; i < modCount.value; i++) {
                 const modId = readString(dataAfterLen, offset)
                 offset += modId.totalLength
@@ -92,70 +91,43 @@ client.on('login_plugin_request', (packet) => {
                 offset += displayName.totalLength
                 const version = readString(dataAfterLen, offset)
                 offset += version.totalLength
-                serverMods.push(modId.value)
+                mods.push(modId.value)
             }
 
-            // Читаем channels после модов
-            let channelCount = { value: 0, length: 1 }
-            let registryCount = { value: 0, length: 1 }
-            try {
-                channelCount = readVarInt(dataAfterLen, offset)
-                offset += channelCount.length
-                console.log('  Channels: ' + channelCount.value)
+            console.log('  Mods: ' + mods.length + ' -> ModListReply')
 
-                // Пропускаем channel данные
-                for (let i = 0; i < channelCount.value; i++) {
-                    const ch = readString(dataAfterLen, offset)
-                    offset += ch.totalLength
-                    const ver = readString(dataAfterLen, offset)
-                    offset += ver.totalLength
-                    const req = dataAfterLen[offset]
-                    offset += 1
-                    if (i < 5) console.log('    ch: ' + ch.value)
-                }
-
-                registryCount = readVarInt(dataAfterLen, offset)
-                offset += registryCount.length
-                console.log('  Registries: ' + registryCount.value)
-            } catch(e) {
-                console.log('  Parse error: ' + e.message)
-            }
-
-            console.log('  Mods: ' + serverMods.length)
-            console.log('  -> ModListReply')
-
-            // Ответ: type=2 + mods + 0 channels + 0 registries
-            const parts = [writeVarInt(2), writeVarInt(serverMods.length)]
-            for (const mod of serverMods) {
+            const parts = [writeVarInt(2), writeVarInt(mods.length)]
+            for (const mod of mods) {
                 parts.push(writeString(mod))
             }
-            parts.push(writeVarInt(0)) // channels
-            parts.push(writeVarInt(0)) // registries
+            parts.push(writeVarInt(0))
+            parts.push(writeVarInt(0))
 
-            const payload = Buffer.concat(parts)
-            const response = makeWrappedResponse('fml:handshake', payload)
+            const response = makeWrappedResponse('fml:handshake', Buffer.concat(parts))
+            client.write('login_plugin_response', { messageId: packet.messageId, data: response })
 
-            client.write('login_plugin_response', {
-                messageId: packet.messageId,
-                data: response
-            })
+        } else if (typeInfo.value === 1) {
+            // Посмотрим что внутри
+            const preview = dataAfterLen.slice(typeInfo.length, typeInfo.length + 50).toString('hex')
+            const previewUtf8 = dataAfterLen.slice(typeInfo.length, typeInfo.length + 100).toString('utf8').replace(/[^\x20-\x7E]/g, '.')
+
+            console.log('  data hex: ' + preview)
+            console.log('  data utf8: ' + previewUtf8)
+
+            // Type 1 в FML3 1.20.1 = RegistryList или ChannelList
+            // Ответ: Acknowledgement (99)
+            console.log('  -> Ack')
+            const response = makeWrappedResponse('fml:handshake', writeVarInt(99))
+            client.write('login_plugin_response', { messageId: packet.messageId, data: response })
 
         } else {
-            console.log('  -> Ack')
-            const payload = writeVarInt(99)
-            const response = makeWrappedResponse('fml:handshake', payload)
-
-            client.write('login_plugin_response', {
-                messageId: packet.messageId,
-                data: response
-            })
+            console.log('  -> Ack (type ' + typeInfo.value + ')')
+            const response = makeWrappedResponse('fml:handshake', writeVarInt(99))
+            client.write('login_plugin_response', { messageId: packet.messageId, data: response })
         }
     } else {
         console.log('#' + packet.messageId + ' ' + innerChannel + ' (len: ' + innerData.length + ')')
-        client.write('login_plugin_response', {
-            messageId: packet.messageId,
-            data: packet.data
-        })
+        client.write('login_plugin_response', { messageId: packet.messageId, data: packet.data })
         console.log('  -> echo')
     }
 })
