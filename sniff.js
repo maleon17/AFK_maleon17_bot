@@ -87,6 +87,9 @@ client.on('update_health', (packet) => {
 
 // Основной обработчик login_plugin_request
 client.on('login_plugin_request', (packet) => {
+    console.log(`\n=== login_plugin_request #${packet.messageId} ===`)
+    console.log('RAW data (hex):', packet.data ? packet.data.slice(0, 32).toString('hex') : 'null')
+    console.log('DATA length:', packet.data ? packet.data.length : 0)
     let innerChannel = ''
     let innerData = Buffer.alloc(0)
 
