@@ -11,6 +11,19 @@ const client = mc.createClient({
 
 client.removeAllListeners('login_plugin_request')
 
+function readVarInt(buffer, offset) {
+    let value = 0
+    let length = 0
+    let currentByte
+    do {
+        currentByte = buffer[offset + length]
+        value |= (currentByte & 0x7F) << (length * 7)
+        length++
+        if (length > 5) return { value: 0, length: 0 }
+    } while ((currentByte & 0x80) !== 0)
+    return { value, length }
+}
+
 let requestNum = 0
 
 client.on('login_plugin_request', (packet) => {
@@ -24,58 +37,83 @@ client.on('login_plugin_request', (packet) => {
     }
     
     requestNum++
-    
-    // Показываем первые 10 байт данных
-    const preview = innerData.slice(0, 10).toString('hex')
-    console.log('#' + packet.messageId + ' ' + innerChannel + ' (len: ' + innerData.length + ') data: ' + preview)
 
-    if (innerChannel === 'tacz:handshake' || innerChannel === 'tacztweaks:handshake') {
-        client.write('login_plugin_response', {
-            messageId: packet.messageId,
-            data: packet.data
-        })
-        console.log('  -> echo')
-    } else if (innerChannel === 'fml:handshake') {
-        // Первый байт = тип пакета в FML3
-        const packetType = innerData[0]
-        console.log('  -> fml type: 0x' + packetType.toString(16))
+    if (innerChannel === 'fml:handshake') {
+        // Читаем varint длину
+        const lenInfo = readVarInt(innerData, 0)
+        const dataAfterLen = innerData.slice(lenInfo.length)
         
-        // В FML3:
-        // 0x01 = ModListReply  
-        // 0x02 = ServerRegistry
-        // 0x03 = RegistryData
-        // 0x04 = ConfigData
-        // 0x05 = Acknowledgement от сервера
+        // Следующий varint — тип пакета
+        const typeInfo = readVarInt(dataAfterLen, 0)
         
-        // Ответ клиента:
-        // На ModList (0x01/0x02) -> отправить ModListReply
-        // На RegistryData (0x03) -> отправить Acknowledgement (0x63 = 99)
-        // На ConfigData (0x04) -> отправить Acknowledgement
+        console.log('#' + packet.messageId + ' ' + innerChannel + 
+            ' varintLen=' + lenInfo.value + 
+            ' type=' + typeInfo.value + 
+            ' first20=' + dataAfterLen.slice(0, 20).toString('hex'))
+        
+        // FML3 типы от сервера:
+        // 1 = ModList
+        // 2 = RegistryList  
+        // 3 = Registry
+        // 4 = ConfigData
         
         let response
         const channelBuf = Buffer.from('fml:handshake')
-
-        if (packetType <= 0x02) {
-            // ModList — отвечаем пустым ModListReply
-            response = Buffer.alloc(1 + channelBuf.length + 3)
+        
+        if (typeInfo.value === 1) {
+            // ModList -> ModListReply (type 2)
+            // varint(len) + varint(type=2) + varint(0 mods) + varint(0 channels) + varint(0 registries)
+            const payload = Buffer.from([0x04, 0x02, 0x00, 0x00, 0x00])
+            response = Buffer.alloc(1 + channelBuf.length + payload.length)
             response[0] = channelBuf.length
             channelBuf.copy(response, 1)
-            response[1 + channelBuf.length] = 0x02  // ModListReply
-            response[2 + channelBuf.length] = 0x00  // 0 mods
-            response[3 + channelBuf.length] = 0x00  // 0 channels
+            payload.copy(response, 1 + channelBuf.length)
+            console.log('  -> ModListReply')
+        } else if (typeInfo.value === 2) {
+            // RegistryList -> Acknowledgement (type 99)
+            const payload = Buffer.from([0x01, 0x63])
+            response = Buffer.alloc(1 + channelBuf.length + payload.length)
+            response[0] = channelBuf.length
+            channelBuf.copy(response, 1)
+            payload.copy(response, 1 + channelBuf.length)
+            console.log('  -> Ack for RegistryList')
+        } else if (typeInfo.value === 3) {
+            // Registry -> Acknowledgement
+            const payload = Buffer.from([0x01, 0x63])
+            response = Buffer.alloc(1 + channelBuf.length + payload.length)
+            response[0] = channelBuf.length
+            channelBuf.copy(response, 1)
+            payload.copy(response, 1 + channelBuf.length)
+            console.log('  -> Ack for Registry')
+        } else if (typeInfo.value === 4) {
+            // ConfigData -> Acknowledgement
+            const payload = Buffer.from([0x01, 0x63])
+            response = Buffer.alloc(1 + channelBuf.length + payload.length)
+            response[0] = channelBuf.length
+            channelBuf.copy(response, 1)
+            payload.copy(response, 1 + channelBuf.length)
+            console.log('  -> Ack for ConfigData')
         } else {
-            // Registry/Config — acknowledgement
-            response = Buffer.alloc(1 + channelBuf.length + 1)
+            // Неизвестный — ack
+            const payload = Buffer.from([0x01, 0x63])
+            response = Buffer.alloc(1 + channelBuf.length + payload.length)
             response[0] = channelBuf.length
             channelBuf.copy(response, 1)
-            response[1 + channelBuf.length] = 0x63
+            payload.copy(response, 1 + channelBuf.length)
+            console.log('  -> Ack for unknown type ' + typeInfo.value)
         }
 
         client.write('login_plugin_response', {
             messageId: packet.messageId,
             data: response
         })
-        console.log('  -> responded')
+    } else {
+        console.log('#' + packet.messageId + ' ' + innerChannel + ' (len: ' + innerData.length + ')')
+        client.write('login_plugin_response', {
+            messageId: packet.messageId,
+            data: packet.data
+        })
+        console.log('  -> echo')
     }
 })
 
@@ -105,4 +143,4 @@ client.on('kick_disconnect', (packet) => {
 client.on('error', (err) => console.log('ERROR:', err.message))
 client.on('end', () => { console.log('DISCONNECTED'); process.exit() })
 
-setTimeout(() => { console.log('TIMEOUT after #' + requestNum); process.exit() }, 20000)
+setTimeout(() => { console.log('TIMEOUT after #' + requestNum); process.exit() }, 30000)
