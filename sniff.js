@@ -114,7 +114,7 @@ client.on('login_plugin_request', (packet) => {
             console.log('  -> Ack (type=' + typeInfo.value + ')')
             
             const nameBuf = Buffer.from('fml:handshake')
-            const ackPayload = writeVarInt(typeInfo.value)
+            const ackPayload = writeVarInt(99)
             const response = Buffer.concat([
                 Buffer.from([nameBuf.length]),
                 nameBuf,
