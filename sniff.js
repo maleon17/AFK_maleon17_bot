@@ -105,16 +105,8 @@ client.on('login_plugin_request', (packet) => {
             client.write('login_plugin_response', { messageId: packet.messageId, data: response })
 
         } else {
-            console.log('  -> empty ack (type=' + typeInfo.value + ')')
-            const nameBuf = Buffer.from('fml:handshake')
-            const ackPayload = Buffer.from([0x03])
-            const response = Buffer.concat([
-                Buffer.from([nameBuf.length]),
-                nameBuf,
-                writeVarInt(ackPayload.length),
-                ackPayload
-            ])
-            client.write('login_plugin_response', { messageId: packet.messageId, data: response })
+            console.log('  -> null (type=' + typeInfo.value + ')')
+            client.write('login_plugin_response', { messageId: packet.messageId, data: null })
         }
     } else if (innerChannel === 'tacz:handshake' || innerChannel === 'tacztweaks:handshake') {
         console.log('  -> echo')
