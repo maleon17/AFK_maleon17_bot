@@ -67,11 +67,6 @@ client.on('login_plugin_request', (packet) => {
         const typeInfo = readVarInt(dataAfterLen, 0)
 
         console.log('  fml type=' + typeInfo.value)
-        
-        // Показываем данные после типа
-        const afterType = dataAfterLen.slice(typeInfo.length)
-        const preview = afterType.slice(0, 50).toString('utf8').replace(/[^\x20-\x7E]/g, '.')
-        console.log('  preview: ' + preview)
 
         if (typeInfo.value === 5) {
             let offset = typeInfo.length
@@ -112,8 +107,6 @@ client.on('login_plugin_request', (packet) => {
         } else {
             console.log('  -> echo (type=' + typeInfo.value + ')')
             client.write('login_plugin_response', { messageId: packet.messageId, data: packet.data })
-        })
-            client.write('login_plugin_response', { messageId: packet.messageId, data: response })
         }
     } else if (innerChannel === 'tacz:handshake' || innerChannel === 'tacztweaks:handshake') {
         console.log('  -> echo')
