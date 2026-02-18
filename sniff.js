@@ -9,7 +9,7 @@ const client = mc.createClient({
     fakeHost: 'donator2.gamely.pro\0FML3\0'
 })
 
-// === Вспомогательные функции (оставляем как есть) ===
+// === Вспомогательные функции ===
 function readVarInt(buffer, offset) {
     let value = 0, length = 0, currentByte
     do {
@@ -19,6 +19,17 @@ function readVarInt(buffer, offset) {
         length++
     } while ((currentByte & 0x80) !== 0 && length < 5)
     return { value, length }
+}
+
+function writeVarInt(value) {
+    const bytes = []
+    do {
+        let b = value & 0x7F
+        value >>>= 7
+        if (value !== 0) b |= 0x80
+        bytes.push(b)
+    } while (value !== 0)
+    return Buffer.from(bytes)
 }
 
 client.on('login_plugin_request', (packet) => {
@@ -31,63 +42,63 @@ client.on('login_plugin_request', (packet) => {
         innerData = packet.data.slice(1 + nameLen)
     }
 
-    // console.log(`[HANDSHAKE] Channel: ${innerChannel}`) // Раскомментируй для отладки
+    console.log(`\n[REQUEST #${packet.messageId}] Channel: ${innerChannel}, DataLen: ${innerData.length}`)
 
-    // === 1. TACZ & TACZTWEAKS ===
+    // === 1. TACZ HANDSHAKE ===
     if (innerChannel === 'tacz:handshake') {
-        // Отправляем просто байт 0x02 (версия протокола)
-        const res = Buffer.concat([
-            Buffer.from([0x02]) 
-        ])
-        const full = Buffer.concat([
-            Buffer.from([innerChannel.length]),
-            Buffer.from(innerChannel),
-            res
-        ])
-        client.write('login_plugin_response', { messageId: packet.messageId, data: full })
+        console.log('[TACZ] Отвечаем версией протокола (0x02)')
+        // Только payload, без названия канала!
+        const responseData = Buffer.from([0x02])
+        
+        client.write('login_plugin_response', { 
+            messageId: packet.messageId, 
+            data: responseData 
+        })
         return
     }
     
+    // === 2. TACZTWEAKS HANDSHAKE ===
     if (innerChannel === 'tacztweaks:handshake') {
-        // Отправляем просто байт 0x01
-        const res = Buffer.concat([Buffer.from([0x01])])
-        const full = Buffer.concat([
-            Buffer.from([innerChannel.length]),
-            Buffer.from(innerChannel),
-            res
-        ])
-        client.write('login_plugin_response', { messageId: packet.messageId, data: full })
+        console.log('[TACZTWEAKS] Отвечаем версией протокола (0x01)')
+        const responseData = Buffer.from([0x01])
+        
+        client.write('login_plugin_response', { 
+            messageId: packet.messageId, 
+            data: responseData 
+        })
         return
     }
 
-    // === 2. FML HANDSHAKE (САМОЕ ВАЖНОЕ) ===
+    // === 3. FML HANDSHAKE ===
     if (innerChannel === 'fml:handshake' && innerData.length > 0) {
-        // Читаем тип пакета
         const typeInfo = readVarInt(innerData, 0)
         const type = typeInfo.value
         
-        // Тип 5 = ModList. Это то, что нам нужно.
+        console.log(`[FML] Packet Type: ${type}`)
+        
+        // Тип 5 = ModList
         if (type === 5) {
-            console.log(`[FML] Получен ModList (Type 5). Просто эхом отправляем обратно...`)
+            console.log('[FML] ModList запрос. Отвечаем ЭХОМ (только payload)')
             
-            // МАГИЯ: Просто отправляем обратно ТЕ ЖЕ САМЫЕ БАЙТЫ, которые прислал сервер.
-            // Не парсим, не собираем. Просто копипаст.
-            const response = Buffer.concat([
-                Buffer.from([innerChannel.length]),
-                Buffer.from(innerChannel),
-                innerData // <--- ВОТ ОНО
-            ])
-            
+            // ВАЖНО: Отправляем обратно только innerData, без приклеивания канала
             client.write('login_plugin_response', { 
                 messageId: packet.messageId, 
-                data: response 
+                data: innerData 
             })
             return
         }
+        
+        // На другие типы FML отвечаем null
+        console.log('[FML] Неизвестный тип, отвечаем null')
+        client.write('login_plugin_response', { 
+            messageId: packet.messageId, 
+            data: null 
+        })
+        return
     }
 
-    // === 3. ВСЁ ОСТАЛЬНОЕ ===
-    // Если канал неизвестный - отправляем null (пустой ответ)
+    // === 4. ВСЁ ОСТАЛЬНОЕ ===
+    console.log('[OTHER] Неизвестный канал, отвечаем null')
     client.write('login_plugin_response', { 
         messageId: packet.messageId, 
         data: null 
