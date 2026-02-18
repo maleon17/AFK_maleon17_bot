@@ -24,6 +24,22 @@ function readVarInt(buffer, offset) {
     return { value, length }
 }
 
+function writeVarInt(value) {
+    const bytes = []
+    do {
+        let b = value & 0x7F
+        value >>>= 7
+        if (value !== 0) b |= 0x80
+        bytes.push(b)
+    } while (value !== 0)
+    return Buffer.from(bytes)
+}
+
+function writeString(str) {
+    const buf = Buffer.from(str)
+    return Buffer.concat([writeVarInt(buf.length), buf])
+}
+
 let requestNum = 0
 
 client.on('login_plugin_request', (packet) => {
@@ -39,69 +55,42 @@ client.on('login_plugin_request', (packet) => {
     requestNum++
 
     if (innerChannel === 'fml:handshake') {
-        // Читаем varint длину
         const lenInfo = readVarInt(innerData, 0)
         const dataAfterLen = innerData.slice(lenInfo.length)
-        
-        // Следующий varint — тип пакета
         const typeInfo = readVarInt(dataAfterLen, 0)
         
-        console.log('#' + packet.messageId + ' ' + innerChannel + 
-            ' varintLen=' + lenInfo.value + 
-            ' type=' + typeInfo.value + 
-            ' first20=' + dataAfterLen.slice(0, 20).toString('hex'))
-        
-        // FML3 типы от сервера:
-        // 1 = ModList
-        // 2 = RegistryList  
-        // 3 = Registry
-        // 4 = ConfigData
-        
-        let response
+        console.log('#' + packet.messageId + ' fml:handshake type=' + typeInfo.value + ' len=' + lenInfo.value)
+
+        let innerPayload
         const channelBuf = Buffer.from('fml:handshake')
-        
-        if (typeInfo.value === 1) {
-            // ModList -> ModListReply (type 2)
-            // varint(len) + varint(type=2) + varint(0 mods) + varint(0 channels) + varint(0 registries)
-            const payload = Buffer.from([0x04, 0x02, 0x00, 0x00, 0x00])
-            response = Buffer.alloc(1 + channelBuf.length + payload.length)
-            response[0] = channelBuf.length
-            channelBuf.copy(response, 1)
-            payload.copy(response, 1 + channelBuf.length)
+
+        if (typeInfo.value === 5) {
+            // ModList -> ответ type=2 (ModListReply)
             console.log('  -> ModListReply')
-        } else if (typeInfo.value === 2) {
-            // RegistryList -> Acknowledgement (type 99)
-            const payload = Buffer.from([0x01, 0x63])
-            response = Buffer.alloc(1 + channelBuf.length + payload.length)
-            response[0] = channelBuf.length
-            channelBuf.copy(response, 1)
-            payload.copy(response, 1 + channelBuf.length)
-            console.log('  -> Ack for RegistryList')
-        } else if (typeInfo.value === 3) {
-            // Registry -> Acknowledgement
-            const payload = Buffer.from([0x01, 0x63])
-            response = Buffer.alloc(1 + channelBuf.length + payload.length)
-            response[0] = channelBuf.length
-            channelBuf.copy(response, 1)
-            payload.copy(response, 1 + channelBuf.length)
-            console.log('  -> Ack for Registry')
-        } else if (typeInfo.value === 4) {
-            // ConfigData -> Acknowledgement
-            const payload = Buffer.from([0x01, 0x63])
-            response = Buffer.alloc(1 + channelBuf.length + payload.length)
-            response[0] = channelBuf.length
-            channelBuf.copy(response, 1)
-            payload.copy(response, 1 + channelBuf.length)
-            console.log('  -> Ack for ConfigData')
+            
+            // Формат: type(2) + varint(0 mods) + varint(0 channels) + varint(0 registries)
+            const replyData = Buffer.concat([
+                writeVarInt(2),    // type = ModListReply
+                writeVarInt(0),    // 0 mods
+                writeVarInt(0),    // 0 channels  
+                writeVarInt(0)     // 0 registries
+            ])
+            
+            innerPayload = Buffer.concat([writeVarInt(replyData.length), replyData])
+            
         } else {
-            // Неизвестный — ack
-            const payload = Buffer.from([0x01, 0x63])
-            response = Buffer.alloc(1 + channelBuf.length + payload.length)
-            response[0] = channelBuf.length
-            channelBuf.copy(response, 1)
-            payload.copy(response, 1 + channelBuf.length)
-            console.log('  -> Ack for unknown type ' + typeInfo.value)
+            // Acknowledgement для всех остальных
+            console.log('  -> Ack (type ' + typeInfo.value + ')')
+            
+            const replyData = Buffer.concat([writeVarInt(99)]) // 99 = 0x63 = ack
+            innerPayload = Buffer.concat([writeVarInt(replyData.length), replyData])
         }
+
+        const response = Buffer.concat([
+            Buffer.from([channelBuf.length]),
+            channelBuf,
+            innerPayload
+        ])
 
         client.write('login_plugin_response', {
             messageId: packet.messageId,
