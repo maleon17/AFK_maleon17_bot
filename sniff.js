@@ -87,7 +87,7 @@ client.on('login_plugin_request', (packet) => {
             console.log('  Mods: ' + mods.length)
 
             // Внутренний payload: type(1) + modCount + modIds + channels(0) + registries(0)
-            const replyParts = [writeVarInt(1), writeVarInt(mods.length)]
+            const replyParts = [writeVarInt(5), writeVarInt(mods.length)]
             for (const mod of mods) {
                 replyParts.push(writeString(mod))
             }
