@@ -10,50 +10,33 @@ const client = mc.createClient({
 })
 
 let requestCount = 0
+let fmlRequests = []
 
 client.on('login_plugin_request', (packet) => {
     requestCount++
-    console.log('\n=== Request #' + requestCount + ' ===')
-    console.log('messageId:', packet.messageId)
-    console.log('channel:', packet.channel)
-    
-    const hex = packet.data ? packet.data.toString('hex') : 'null'
-    const utf8 = packet.data ? packet.data.toString('utf8').replace(/[^\x20-\x7E]/g, '.') : 'null'
-    
-    console.log('data hex:', hex.substring(0, 200))
-    console.log('data readable:', utf8.substring(0, 200))
-    
-    // Первые байты показывают вложенный канал
-    if (packet.data && packet.data.length > 0) {
+    console.log('Request #' + requestCount + ': ' + packet.channel + ' (id: ' + packet.messageId + ')')
+
+    if (packet.data) {
         const nameLen = packet.data[0]
         const innerChannel = packet.data.slice(1, 1 + nameLen).toString('utf8')
-        console.log('inner channel:', innerChannel)
-        console.log('inner data hex:', packet.data.slice(1 + nameLen).toString('hex').substring(0, 200))
+        console.log('  inner:', innerChannel)
     }
 
-    // Отвечаем на все запросы
-    if (packet.channel === 'fml:loginwrapper' && packet.data) {
-        const nameLen = packet.data[0]
-        const innerChannel = packet.data.slice(1, 1 + nameLen).toString('utf8')
-        
-        const response = Buffer.alloc(2 + innerChannel.length)
-        response[0] = innerChannel.length
-        response.write(innerChannel, 1)
-        response[1 + innerChannel.length] = 0
-        
-        console.log('-> Отвечаем на:', innerChannel)
-        
-        client.write('login_plugin_response', {
-            messageId: packet.messageId,
-            data: response
-        })
-    } else {
+    fmlRequests.push(packet)
+})
+
+// Ждём все запросы, потом отвечаем
+setTimeout(() => {
+    console.log('\nПолучено запросов: ' + fmlRequests.length)
+    console.log('Отвечаем null на все...\n')
+
+    for (const packet of fmlRequests) {
         client.write('login_plugin_response', {
             messageId: packet.messageId,
             data: null
         })
     }
-})
+}, 2000)
 
 client.on('login', () => {
     console.log('\n*** SUCCESS! Logged in! ***')
@@ -61,6 +44,7 @@ client.on('login', () => {
 
 client.on('disconnect', (packet) => {
     console.log('DISCONNECT:', JSON.stringify(packet).substring(0, 300))
+    process.exit()
 })
 
 client.on('kick_disconnect', (packet) => {
