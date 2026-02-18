@@ -24,16 +24,35 @@ client.on('login_plugin_request', (packet) => {
     }
     
     requestNum++
-    console.log('#' + packet.messageId + ' ' + innerChannel + ' (data len: ' + innerData.length + ', first byte: 0x' + (innerData.length > 0 ? innerData[0].toString(16) : '??') + ')')
+    console.log('#' + packet.messageId + ' ' + innerChannel + ' (len: ' + innerData.length + ', first: 0x' + (innerData.length > 0 ? innerData[0].toString(16) : '??') + ')')
 
-    // Отвечаем сразу на каждый запрос
-    // Попробуем эхо — вернуть те же данные что получили
-    client.write('login_plugin_response', {
-        messageId: packet.messageId,
-        data: packet.data
-    })
-    
-    console.log('  -> echo response sent')
+    if (innerChannel === 'tacz:handshake' || innerChannel === 'tacztweaks:handshake') {
+        // Эхо работает для tacz
+        client.write('login_plugin_response', {
+            messageId: packet.messageId,
+            data: packet.data
+        })
+        console.log('  -> echo')
+    } else if (innerChannel === 'fml:handshake') {
+        // FML3 acknowledgement
+        const channelBuf = Buffer.from('fml:handshake')
+        const ack = Buffer.alloc(1 + channelBuf.length + 1)
+        ack[0] = channelBuf.length
+        channelBuf.copy(ack, 1)
+        ack[1 + channelBuf.length] = 0x63
+        
+        client.write('login_plugin_response', {
+            messageId: packet.messageId,
+            data: ack
+        })
+        console.log('  -> fml ack')
+    } else {
+        client.write('login_plugin_response', {
+            messageId: packet.messageId,
+            data: packet.data
+        })
+        console.log('  -> echo (unknown)')
+    }
 })
 
 client.on('login', () => {
@@ -55,7 +74,7 @@ client.on('disconnect', (packet) => {
 })
 
 client.on('kick_disconnect', (packet) => {
-    console.log('KICKED after #' + requestNum + ':', JSON.stringify(packet).substring(0, 300))
+    console.log('KICKED:', JSON.stringify(packet).substring(0, 300))
     process.exit()
 })
 
