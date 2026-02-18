@@ -9,34 +9,29 @@ const client = mc.createClient({
     fakeHost: 'donator2.gamely.pro\0FML3\0'
 })
 
-let requestCount = 0
-let fmlRequests = []
+// Перехватываем ДО стандартного обработчика
+client.on('raw.login_plugin_request', (buffer) => {
+    console.log('RAW login_plugin_request intercepted')
+})
+
+// Убираем стандартные обработчики login_plugin_request
+const origListeners = client.listeners('login_plugin_request')
+console.log('Default listeners:', origListeners.length)
+
+client.removeAllListeners('login_plugin_request')
 
 client.on('login_plugin_request', (packet) => {
-    requestCount++
-    console.log('Request #' + requestCount + ': ' + packet.channel + ' (id: ' + packet.messageId + ')')
-
+    console.log('Request channel:', packet.channel, 'id:', packet.messageId)
+    
     if (packet.data) {
         const nameLen = packet.data[0]
         const innerChannel = packet.data.slice(1, 1 + nameLen).toString('utf8')
         console.log('  inner:', innerChannel)
     }
 
-    fmlRequests.push(packet)
+    // НЕ отвечаем — просто молчим
+    console.log('  -> Игнорируем (не отвечаем)')
 })
-
-// Ждём все запросы, потом отвечаем
-setTimeout(() => {
-    console.log('\nПолучено запросов: ' + fmlRequests.length)
-    console.log('Отвечаем null на все...\n')
-
-    for (const packet of fmlRequests) {
-        client.write('login_plugin_response', {
-            messageId: packet.messageId,
-            data: null
-        })
-    }
-}, 2000)
 
 client.on('login', () => {
     console.log('\n*** SUCCESS! Logged in! ***')
@@ -62,6 +57,6 @@ client.on('end', () => {
 })
 
 setTimeout(() => {
-    console.log('TIMEOUT')
+    console.log('TIMEOUT - сервер ждёт ответа')
     process.exit()
 }, 15000)
