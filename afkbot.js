@@ -1,4 +1,5 @@
 const mc = require('minecraft-protocol')
+require('minecraft-protocol-forge')(mc)
 
 let client = null
 let isRunning = false
@@ -17,12 +18,8 @@ function startBot(verifyCallback, logCallback) {
         port: 30958,
         username: 'maleon17',
         version: '1.20.1',
-        auth: 'offline'
-    })
-
-    // Полностью игнорируем Forge запросы
-    client.on('login_plugin_request', (packet) => {
-        console.log('Forge plugin request:', packet.channel)
+        auth: 'offline',
+        forgeMods: []
     })
 
     client.on('login', () => {
