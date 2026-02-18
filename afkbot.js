@@ -22,16 +22,6 @@ function startBot(verifyCallback, logCallback) {
         fakeHost: 'donator2.gamely.pro\0FML3\0',
     })
 
-    // НЕ отвечаем на Forge handshake — просто игнорируем
-    client.on('login_plugin_request', (packet) => {
-        console.log('Forge plugin request:', packet.channel)
-        
-        // Отвечаем что не понимаем этот канал
-        client.write('login_plugin_response', {
-            messageId: packet.messageId,
-            data: null
-        })
-    })
 
     client.on('login', () => {
         isRunning = true
