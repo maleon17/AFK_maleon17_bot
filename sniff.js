@@ -57,8 +57,15 @@ function makeWrappedResponse(channelName, payload) {
 }
 
 let requestNum = 0
+let answeredIds = new Set()
 
 client.on('login_plugin_request', (packet) => {
+    // Пропускаем повторные
+    if (answeredIds.has(packet.messageId)) {
+        console.log('#' + packet.messageId + ' ПОВТОРНЫЙ - пропускаем')
+        return
+    }
+
     let innerChannel = ''
     let innerData = Buffer.alloc(0)
 
@@ -69,16 +76,16 @@ client.on('login_plugin_request', (packet) => {
     }
 
     requestNum++
+    console.log('#' + packet.messageId + ' ' + innerChannel + ' (len: ' + innerData.length + ')')
 
     if (innerChannel === 'fml:handshake') {
         const lenInfo = readVarInt(innerData, 0)
         const dataAfterLen = innerData.slice(lenInfo.length)
         const typeInfo = readVarInt(dataAfterLen, 0)
 
-        console.log('#' + packet.messageId + ' fml type=' + typeInfo.value + ' len=' + lenInfo.value)
+        console.log('  fml type=' + typeInfo.value)
 
         if (typeInfo.value === 5) {
-            // ModList
             let offset = typeInfo.length
             const modCount = readVarInt(dataAfterLen, offset)
             offset += modCount.length
@@ -105,30 +112,21 @@ client.on('login_plugin_request', (packet) => {
 
             const response = makeWrappedResponse('fml:handshake', Buffer.concat(parts))
             client.write('login_plugin_response', { messageId: packet.messageId, data: response })
-
-        } else if (typeInfo.value === 1) {
-            // Посмотрим что внутри
-            const preview = dataAfterLen.slice(typeInfo.length, typeInfo.length + 50).toString('hex')
-            const previewUtf8 = dataAfterLen.slice(typeInfo.length, typeInfo.length + 100).toString('utf8').replace(/[^\x20-\x7E]/g, '.')
-
-            console.log('  data hex: ' + preview)
-            console.log('  data utf8: ' + previewUtf8)
-
-            // Type 1 в FML3 1.20.1 = RegistryList или ChannelList
-            // Ответ: Acknowledgement (99)
+            answeredIds.add(packet.messageId)
+        } else {
             console.log('  -> Ack')
             const response = makeWrappedResponse('fml:handshake', writeVarInt(99))
             client.write('login_plugin_response', { messageId: packet.messageId, data: response })
-
-        } else {
-            console.log('  -> Ack (type ' + typeInfo.value + ')')
-            const response = makeWrappedResponse('fml:handshake', writeVarInt(99))
-            client.write('login_plugin_response', { messageId: packet.messageId, data: response })
+            answeredIds.add(packet.messageId)
         }
-    } else {
-        console.log('#' + packet.messageId + ' ' + innerChannel + ' (len: ' + innerData.length + ')')
-        client.write('login_plugin_response', { messageId: packet.messageId, data: packet.data })
+    } else if (innerChannel === 'tacz:handshake' || innerChannel === 'tacztweaks:handshake') {
         console.log('  -> echo')
+        client.write('login_plugin_response', { messageId: packet.messageId, data: packet.data })
+        answeredIds.add(packet.messageId)
+    } else {
+        console.log('  -> echo')
+        client.write('login_plugin_response', { messageId: packet.messageId, data: packet.data })
+        answeredIds.add(packet.messageId)
     }
 })
 
