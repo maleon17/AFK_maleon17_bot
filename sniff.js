@@ -16,53 +16,40 @@ let collecting = true
 
 client.on('login_plugin_request', (packet) => {
     let innerChannel = ''
-    
     if (packet.data) {
         const nameLen = packet.data[0]
         innerChannel = packet.data.slice(1, 1 + nameLen).toString('utf8')
     }
-
     console.log('#' + packet.messageId + ' ' + innerChannel)
-
-    if (collecting) {
-        requests.push(packet)
-    }
+    if (collecting) requests.push({ packet, innerChannel })
 })
 
-// Ждём все запросы, потом пробуем разные ответы
 setTimeout(() => {
     collecting = false
     console.log('\nВсего: ' + requests.length + ' запросов')
-    console.log('Пробуем ответить acknowledgement на каждый...\n')
+    console.log('Отвечаем...\n')
 
-    for (const packet of requests) {
-        let innerChannel = ''
-        if (packet.data) {
-            const nameLen = packet.data[0]
-            innerChannel = packet.data.slice(1, 1 + nameLen).toString('utf8')
-        }
-
+    for (const { packet, innerChannel } of requests) {
         let response
 
         if (innerChannel === 'fml:handshake') {
-            // FML3 acknowledgement: channel name + byte 0x63 (99 = acknowledgement)
-            const nameLen = Buffer.byteLength('fml:handshake')
-            response = Buffer.alloc(nameLen + 2)
-            response[0] = nameLen
-            response.write('fml:handshake', 1)
-            response[1 + nameLen] = 0x63
-        } else if (innerChannel === 'tacz:handshake') {
-            const nameLen = Buffer.byteLength('tacz:handshake')
-            response = Buffer.alloc(nameLen + 2)
-            response[0] = nameLen
-            response.write('tacz:handshake', 1)
-            response[1 + nameLen] = 0x01
-        } else if (innerChannel === 'tacztweaks:handshake') {
-            const nameLen = Buffer.byteLength('tacztweaks:handshake')
-            response = Buffer.alloc(nameLen + 2)
-            response[0] = nameLen
-            response.write('tacztweaks:handshake', 1)
-            response[1 + nameLen] = 0x01
+            // FML3: ответ обёрнут в loginwrapper
+            // Формат: varint(len(channelName)) + channelName + acknowledgement(0x63)
+            const channelBuf = Buffer.from('fml:handshake')
+            response = Buffer.alloc(1 + channelBuf.length + 1)
+            response[0] = channelBuf.length
+            channelBuf.copy(response, 1)
+            response[1 + channelBuf.length] = 0x63 // acknowledgement byte
+
+            // Но может сервер ожидает varint формат
+            // Попробуем другой формат: просто acknowledgement
+        } else {
+            // tacz и tacztweaks — пустой ответ
+            const channelBuf = Buffer.from(innerChannel)
+            response = Buffer.alloc(1 + channelBuf.length + 1)
+            response[0] = channelBuf.length
+            channelBuf.copy(response, 1)
+            response[1 + channelBuf.length] = 0x01
         }
 
         client.write('login_plugin_response', {
@@ -73,29 +60,30 @@ setTimeout(() => {
 }, 5000)
 
 client.on('login', () => {
-    console.log('\n*** SUCCESS! Logged in! ***')
+    console.log('\n*** SUCCESS! ***')
 })
 
 client.on('disconnect', (packet) => {
-    console.log('DISCONNECT:', JSON.stringify(packet).substring(0, 500))
+    // Парсим причину подробнее
+    try {
+        const reason = JSON.parse(packet.reason)
+        if (reason.with) {
+            console.log('DISCONNECT:', reason.with[0].substring(0, 300))
+        } else {
+            console.log('DISCONNECT:', JSON.stringify(reason).substring(0, 300))
+        }
+    } catch(e) {
+        console.log('DISCONNECT:', JSON.stringify(packet).substring(0, 300))
+    }
     process.exit()
 })
 
 client.on('kick_disconnect', (packet) => {
-    console.log('KICKED:', JSON.stringify(packet).substring(0, 500))
+    console.log('KICKED:', JSON.stringify(packet).substring(0, 300))
     process.exit()
 })
 
-client.on('error', (err) => {
-    console.log('ERROR:', err.message)
-})
+client.on('error', (err) => console.log('ERROR:', err.message))
+client.on('end', () => { console.log('DISCONNECTED'); process.exit() })
 
-client.on('end', () => {
-    console.log('DISCONNECTED')
-    process.exit()
-})
-
-setTimeout(() => {
-    console.log('TIMEOUT')
-    process.exit()
-}, 20000)
+setTimeout(() => { console.log('TIMEOUT'); process.exit() }, 20000)
