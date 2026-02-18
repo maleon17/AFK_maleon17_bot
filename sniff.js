@@ -24,25 +24,48 @@ client.on('login_plugin_request', (packet) => {
     if (collecting) requests.push({ packet, innerChannel })
 })
 
+function makeResponse(innerChannel, payloadByte) {
+    // Формат: varint(channelNameLen) + channelName + payload
+    const channelBuf = Buffer.from(innerChannel)
+    const payloadLen = 1
+    // Общая длина внутренних данных
+    const innerData = Buffer.alloc(payloadLen)
+    innerData[0] = payloadByte
+
+    // Обёртка loginwrapper: varint(len(channel)) + channel + varint(len(innerData)) + innerData
+    const result = Buffer.alloc(1 + channelBuf.length + 1 + innerData.length)
+    let offset = 0
+    result[offset++] = channelBuf.length
+    channelBuf.copy(result, offset)
+    offset += channelBuf.length
+    result[offset++] = innerData.length
+    innerData.copy(result, offset)
+
+    return result
+}
+
 setTimeout(() => {
     collecting = false
     console.log('\nВсего: ' + requests.length + ' запросов')
     console.log('Отвечаем...\n')
 
     for (const { packet, innerChannel } of requests) {
+        let response
+
         if (innerChannel === 'fml:handshake') {
-            // Acknowledgement
-            client.write('login_plugin_response', {
-                messageId: packet.messageId,
-                data: Buffer.from([0x63])
-            })
+            response = makeResponse('fml:handshake', 0x63)
+        } else if (innerChannel === 'tacz:handshake') {
+            response = makeResponse('tacz:handshake', 0x01)
+        } else if (innerChannel === 'tacztweaks:handshake') {
+            response = makeResponse('tacztweaks:handshake', 0x01)
         } else {
-            // tacz, tacztweaks — не поддерживаем
-            client.write('login_plugin_response', {
-                messageId: packet.messageId,
-                data: null
-            })
+            response = makeResponse(innerChannel, 0x01)
         }
+
+        client.write('login_plugin_response', {
+            messageId: packet.messageId,
+            data: response
+        })
     }
 }, 5000)
 
