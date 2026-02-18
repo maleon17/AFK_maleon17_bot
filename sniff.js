@@ -24,34 +24,58 @@ client.on('login_plugin_request', (packet) => {
     }
     
     requestNum++
-    console.log('#' + packet.messageId + ' ' + innerChannel + ' (len: ' + innerData.length + ', first: 0x' + (innerData.length > 0 ? innerData[0].toString(16) : '??') + ')')
+    
+    // Показываем первые 10 байт данных
+    const preview = innerData.slice(0, 10).toString('hex')
+    console.log('#' + packet.messageId + ' ' + innerChannel + ' (len: ' + innerData.length + ') data: ' + preview)
 
     if (innerChannel === 'tacz:handshake' || innerChannel === 'tacztweaks:handshake') {
-        // Эхо работает для tacz
         client.write('login_plugin_response', {
             messageId: packet.messageId,
             data: packet.data
         })
         console.log('  -> echo')
     } else if (innerChannel === 'fml:handshake') {
-        // FML3 acknowledgement
-        const channelBuf = Buffer.from('fml:handshake')
-        const ack = Buffer.alloc(1 + channelBuf.length + 1)
-        ack[0] = channelBuf.length
-        channelBuf.copy(ack, 1)
-        ack[1 + channelBuf.length] = 0x63
+        // Первый байт = тип пакета в FML3
+        const packetType = innerData[0]
+        console.log('  -> fml type: 0x' + packetType.toString(16))
         
+        // В FML3:
+        // 0x01 = ModListReply  
+        // 0x02 = ServerRegistry
+        // 0x03 = RegistryData
+        // 0x04 = ConfigData
+        // 0x05 = Acknowledgement от сервера
+        
+        // Ответ клиента:
+        // На ModList (0x01/0x02) -> отправить ModListReply
+        // На RegistryData (0x03) -> отправить Acknowledgement (0x63 = 99)
+        // На ConfigData (0x04) -> отправить Acknowledgement
+        
+        let response
+        const channelBuf = Buffer.from('fml:handshake')
+
+        if (packetType <= 0x02) {
+            // ModList — отвечаем пустым ModListReply
+            response = Buffer.alloc(1 + channelBuf.length + 3)
+            response[0] = channelBuf.length
+            channelBuf.copy(response, 1)
+            response[1 + channelBuf.length] = 0x02  // ModListReply
+            response[2 + channelBuf.length] = 0x00  // 0 mods
+            response[3 + channelBuf.length] = 0x00  // 0 channels
+        } else {
+            // Registry/Config — acknowledgement
+            response = Buffer.alloc(1 + channelBuf.length + 1)
+            response[0] = channelBuf.length
+            channelBuf.copy(response, 1)
+            response[1 + channelBuf.length] = 0x63
+        }
+
         client.write('login_plugin_response', {
             messageId: packet.messageId,
-            data: ack
+            data: response
         })
-        console.log('  -> fml ack')
-    } else {
-        client.write('login_plugin_response', {
-            messageId: packet.messageId,
-            data: packet.data
-        })
-        console.log('  -> echo (unknown)')
+        console.log('  -> responded')
     }
 })
 
