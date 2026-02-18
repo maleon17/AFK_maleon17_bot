@@ -22,20 +22,15 @@ function startBot(verifyCallback, logCallback) {
         fakeHost: 'donator2.gamely.pro\0FML3\0',
     })
 
-    // Отвечаем на Forge handshake
+    // НЕ отвечаем на Forge handshake — просто игнорируем
     client.on('login_plugin_request', (packet) => {
         console.log('Forge plugin request:', packet.channel)
-
-        if (packet.channel === 'fml:loginwrapper' || 
-            packet.channel === 'fml:handshake' ||
-            packet.channel.startsWith('fml:')) {
-
-            // Отправляем пустой ответ — "у меня всё есть"
-            client.write('login_plugin_response', {
-                messageId: packet.messageId,
-                data: Buffer.alloc(0)
-            })
-        }
+        
+        // Отвечаем что не понимаем этот канал
+        client.write('login_plugin_response', {
+            messageId: packet.messageId,
+            data: null
+        })
     })
 
     client.on('login', () => {
