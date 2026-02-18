@@ -22,7 +22,45 @@ function startBot(verifyCallback, logCallback) {
     })
 
     forgeHandshake(client, {
-        forgeMods: [],
+        forgeMods: [
+            { modid: 'minecraft', version: '1.20.1' },
+            { modid: 'forge', version: '47.2.0' },
+            { modid: 'captureofzones', version: '0.1.7-a' },
+            { modid: 'takkit', version: '1.3.1' },
+            { modid: 'rationcraft', version: '1.3.7' },
+            { modid: 'caps_awim_tactical_gear_rework', version: '2.5.0202.26' },
+            { modid: 'wool_bands', version: '1.0.0' },
+            { modid: 'voidlessframework', version: '1.3.4' },
+            { modid: 'voicechat', version: '1.20.1-2.6.11' },
+            { modid: 'prefix_teb', version: '1.0-SNAPSHOT' },
+            { modid: 'mixinsquared', version: '0.3.3' },
+            { modid: 'creativecore', version: '2.12.32' },
+            { modid: 'survival_instinct', version: '1.0.2' },
+            { modid: 'kit_for_teb', version: '1.0.0' },
+            { modid: 'walkietalkie', version: '1.3.0' },
+            { modid: 'personality', version: '4.1.0' },
+            { modid: 'lrtactical', version: '0.3.0' },
+            { modid: 'kotlinforforge', version: '4.12.0' },
+            { modid: 'flywheel', version: '1.0.5' },
+            { modid: 'ponder', version: '1.0.91' },
+            { modid: 'create', version: '6.0.8' },
+            { modid: 'createdeco', version: '2.0.3-1.20.1-forge' },
+            { modid: 'framedblocks', version: '9.4.3' },
+            { modid: 'lexiconfig', version: '1.4.18-1' },
+            { modid: 'endlessammo', version: '1.2.0' },
+            { modid: 'mobsunscreen', version: '3.1.1' },
+            { modid: 'soldiersdelight', version: '1.2' },
+            { modid: 'parcool', version: '3.4.3.2' },
+            { modid: 'chamber_clarity', version: '4.0.0-1.20.1' },
+            { modid: 'suppressionmod', version: '1.1.1' },
+            { modid: 'fracturepoint', version: '2.3.11-beta' },
+            { modid: 'taczxgunlightsaddon', version: '1.0.7' },
+            { modid: 'ferritecore', version: '6.0.1' },
+            { modid: 'yet_another_config_lib_v3', version: '3.6.6+1.20.1-forge' },
+            { modid: 'simpleradio', version: '3.4.6' },
+            { modid: 'skinrestorer', version: '2.5.0+1.20-forge' },
+            { modid: 'click2pick', version: '1.0.0' }
+        ],
         channels: []
     })
 
