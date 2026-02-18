@@ -40,19 +40,11 @@ function writeString(str) {
     return Buffer.concat([writeVarInt(buf.length), buf])
 }
 
-// Список модов сервера
-const SERVER_MODS = [
-    'minecraft', 'forge', 'captureofzones', 'takkit', 'rationcraft',
-    'caps_awim_tactical_gear_rework', 'wool_bands', 'voidlessframework',
-    'voicechat', 'prefix_teb', 'mixinsquared', 'creativecore',
-    'survival_instinct', 'kit_for_teb', 'walkietalkie', 'personality',
-    'lrtactical', 'kotlinforforge', 'flywheel', 'ponder', 'create',
-    'createdeco', 'framedblocks', 'lexiconfig', 'endlessammo',
-    'mobsunscreen', 'soldiersdelight', 'parcool', 'chamber_clarity',
-    'suppressionmod', 'fracturepoint', 'taczxgunlightsaddon',
-    'ferritecore', 'yet_another_config_lib_v3', 'simpleradio',
-    'skinrestorer', 'click2pick'
-]
+function readString(buffer, offset) {
+    const lenInfo = readVarInt(buffer, offset)
+    const str = buffer.slice(offset + lenInfo.length, offset + lenInfo.length + lenInfo.value).toString('utf8')
+    return { value: str, totalLength: lenInfo.length + lenInfo.value }
+}
 
 let requestNum = 0
 
@@ -73,41 +65,73 @@ client.on('login_plugin_request', (packet) => {
         const dataAfterLen = innerData.slice(lenInfo.length)
         const typeInfo = readVarInt(dataAfterLen, 0)
         
-        console.log('#' + packet.messageId + ' fml:handshake type=' + typeInfo.value + ' len=' + lenInfo.value)
-
-        const channelBuf = Buffer.from('fml:handshake')
-        let innerPayload
+        console.log('#' + packet.messageId + ' fml:handshake type=' + typeInfo.value)
 
         if (typeInfo.value === 5) {
-            console.log('  -> ModListReply with ' + SERVER_MODS.length + ' mods')
+            // Парсим ModList
+            let offset = typeInfo.length
             
-            // type=2 + varint(mod count) + mod strings + varint(0 channels) + varint(0 registries)
-            const parts = [writeVarInt(2), writeVarInt(SERVER_MODS.length)]
-            for (const mod of SERVER_MODS) {
+            // Количество модов
+            const modCount = readVarInt(dataAfterLen, offset)
+            offset += modCount.length
+            console.log('  Mod count: ' + modCount.value)
+            
+            const mods = []
+            for (let i = 0; i < modCount.value; i++) {
+                // modId
+                const modId = readString(dataAfterLen, offset)
+                offset += modId.totalLength
+                // displayName
+                const displayName = readString(dataAfterLen, offset)
+                offset += displayName.totalLength
+                // version
+                const version = readString(dataAfterLen, offset)
+                offset += version.totalLength
+                
+                mods.push(modId.value)
+                if (i < 60) {
+                    console.log('  ' + modId.value + ' (' + version.value + ')')
+                }
+            }
+
+            console.log('\n  -> ModListReply with ' + mods.length + ' mods')
+
+            // Ответ: type=2 + кол-во модов + modId строки + 0 channels + 0 registries
+            const channelBuf = Buffer.from('fml:handshake')
+            const parts = [writeVarInt(2), writeVarInt(mods.length)]
+            for (const mod of mods) {
                 parts.push(writeString(mod))
             }
-            parts.push(writeVarInt(0)) // 0 channels
-            parts.push(writeVarInt(0)) // 0 registries
-            
+            parts.push(writeVarInt(0))
+            parts.push(writeVarInt(0))
+
             const replyData = Buffer.concat(parts)
-            innerPayload = Buffer.concat([writeVarInt(replyData.length), replyData])
-            
+            const innerPayload = Buffer.concat([writeVarInt(replyData.length), replyData])
+            const response = Buffer.concat([
+                Buffer.from([channelBuf.length]),
+                channelBuf,
+                innerPayload
+            ])
+
+            client.write('login_plugin_response', {
+                messageId: packet.messageId,
+                data: response
+            })
         } else {
-            console.log('  -> Ack (type ' + typeInfo.value + ')')
+            console.log('  -> Ack')
+            const channelBuf = Buffer.from('fml:handshake')
             const replyData = writeVarInt(99)
-            innerPayload = Buffer.concat([writeVarInt(replyData.length), replyData])
+            const innerPayload = Buffer.concat([writeVarInt(replyData.length), replyData])
+            const response = Buffer.concat([
+                Buffer.from([channelBuf.length]),
+                channelBuf,
+                innerPayload
+            ])
+            client.write('login_plugin_response', {
+                messageId: packet.messageId,
+                data: response
+            })
         }
-
-        const response = Buffer.concat([
-            Buffer.from([channelBuf.length]),
-            channelBuf,
-            innerPayload
-        ])
-
-        client.write('login_plugin_response', {
-            messageId: packet.messageId,
-            data: response
-        })
     } else {
         console.log('#' + packet.messageId + ' ' + innerChannel + ' (len: ' + innerData.length + ')')
         client.write('login_plugin_response', {
