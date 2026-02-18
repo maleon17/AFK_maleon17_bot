@@ -46,87 +46,105 @@ function readString(buffer, offset) {
     return { value: str, totalLength: lenInfo.length + lenInfo.value }
 }
 
+function makeWrappedResponse(channelName, payload) {
+    const channelBuf = Buffer.from(channelName)
+    const innerPayload = Buffer.concat([writeVarInt(payload.length), payload])
+    return Buffer.concat([
+        Buffer.from([channelBuf.length]),
+        channelBuf,
+        innerPayload
+    ])
+}
+
 let requestNum = 0
+let serverMods = []
 
 client.on('login_plugin_request', (packet) => {
     let innerChannel = ''
     let innerData = Buffer.alloc(0)
-    
+
     if (packet.data) {
         const nameLen = packet.data[0]
         innerChannel = packet.data.slice(1, 1 + nameLen).toString('utf8')
         innerData = packet.data.slice(1 + nameLen)
     }
-    
+
     requestNum++
 
     if (innerChannel === 'fml:handshake') {
         const lenInfo = readVarInt(innerData, 0)
         const dataAfterLen = innerData.slice(lenInfo.length)
         const typeInfo = readVarInt(dataAfterLen, 0)
-        
-        console.log('#' + packet.messageId + ' fml:handshake type=' + typeInfo.value)
+
+        console.log('#' + packet.messageId + ' fml type=' + typeInfo.value + ' len=' + lenInfo.value)
 
         if (typeInfo.value === 5) {
-            // Парсим ModList
+            // ModList — парсим
             let offset = typeInfo.length
-            
-            // Количество модов
             const modCount = readVarInt(dataAfterLen, offset)
             offset += modCount.length
-            console.log('  Mod count: ' + modCount.value)
-            
-            const mods = []
+
+            serverMods = []
             for (let i = 0; i < modCount.value; i++) {
-                // modId
                 const modId = readString(dataAfterLen, offset)
                 offset += modId.totalLength
-                // displayName
                 const displayName = readString(dataAfterLen, offset)
                 offset += displayName.totalLength
-                // version
                 const version = readString(dataAfterLen, offset)
                 offset += version.totalLength
-                
-                mods.push(modId.value)
-                if (i < 60) {
-                    console.log('  ' + modId.value + ' (' + version.value + ')')
-                }
+                serverMods.push(modId.value)
             }
 
-            console.log('\n  -> ModListReply with ' + mods.length + ' mods')
+            // Читаем channels после модов
+            let channelCount = { value: 0, length: 1 }
+            let registryCount = { value: 0, length: 1 }
+            try {
+                channelCount = readVarInt(dataAfterLen, offset)
+                offset += channelCount.length
+                console.log('  Channels: ' + channelCount.value)
 
-            // Ответ: type=2 + кол-во модов + modId строки + 0 channels + 0 registries
-            const channelBuf = Buffer.from('fml:handshake')
-            const parts = [writeVarInt(2), writeVarInt(mods.length)]
-            for (const mod of mods) {
+                // Пропускаем channel данные
+                for (let i = 0; i < channelCount.value; i++) {
+                    const ch = readString(dataAfterLen, offset)
+                    offset += ch.totalLength
+                    const ver = readString(dataAfterLen, offset)
+                    offset += ver.totalLength
+                    const req = dataAfterLen[offset]
+                    offset += 1
+                    if (i < 5) console.log('    ch: ' + ch.value)
+                }
+
+                registryCount = readVarInt(dataAfterLen, offset)
+                offset += registryCount.length
+                console.log('  Registries: ' + registryCount.value)
+            } catch(e) {
+                console.log('  Parse error: ' + e.message)
+            }
+
+            console.log('  Mods: ' + serverMods.length)
+            console.log('  -> ModListReply')
+
+            // Ответ: type=2 + mods + 0 channels + 0 registries
+            const parts = [writeVarInt(2), writeVarInt(serverMods.length)]
+            for (const mod of serverMods) {
                 parts.push(writeString(mod))
             }
-            parts.push(writeVarInt(0))
-            parts.push(writeVarInt(0))
+            parts.push(writeVarInt(0)) // channels
+            parts.push(writeVarInt(0)) // registries
 
-            const replyData = Buffer.concat(parts)
-            const innerPayload = Buffer.concat([writeVarInt(replyData.length), replyData])
-            const response = Buffer.concat([
-                Buffer.from([channelBuf.length]),
-                channelBuf,
-                innerPayload
-            ])
+            const payload = Buffer.concat(parts)
+            const response = makeWrappedResponse('fml:handshake', payload)
 
             client.write('login_plugin_response', {
                 messageId: packet.messageId,
                 data: response
             })
+
         } else {
             console.log('  -> Ack')
-            const channelBuf = Buffer.from('fml:handshake')
-            const replyData = writeVarInt(99)
-            const innerPayload = Buffer.concat([writeVarInt(replyData.length), replyData])
-            const response = Buffer.concat([
-                Buffer.from([channelBuf.length]),
-                channelBuf,
-                innerPayload
-            ])
+            const payload = writeVarInt(99)
+            const response = makeWrappedResponse('fml:handshake', payload)
+
             client.write('login_plugin_response', {
                 messageId: packet.messageId,
                 data: response
@@ -150,18 +168,18 @@ client.on('disconnect', (packet) => {
     try {
         const reason = JSON.parse(packet.reason)
         if (reason.with) {
-            console.log('DISCONNECT after #' + requestNum + ':', reason.with[0].substring(0, 300))
+            console.log('DISCONNECT after #' + requestNum + ':', reason.with[0].substring(0, 500))
         } else {
-            console.log('DISCONNECT after #' + requestNum + ':', JSON.stringify(reason).substring(0, 300))
+            console.log('DISCONNECT after #' + requestNum + ':', JSON.stringify(reason).substring(0, 500))
         }
     } catch(e) {
-        console.log('DISCONNECT:', JSON.stringify(packet).substring(0, 300))
+        console.log('DISCONNECT:', JSON.stringify(packet).substring(0, 500))
     }
     process.exit()
 })
 
 client.on('kick_disconnect', (packet) => {
-    console.log('KICKED:', JSON.stringify(packet).substring(0, 300))
+    console.log('KICKED:', JSON.stringify(packet).substring(0, 500))
     process.exit()
 })
 
