@@ -1,7 +1,5 @@
 const mc = require('minecraft-protocol')
-const forge = require('minecraft-protocol-forge')
-console.log(Object.keys(forge))
-process.exit()
+const { forgeHandshake } = require('minecraft-protocol-forge')
 
 let client = null
 let isRunning = false
@@ -20,8 +18,12 @@ function startBot(verifyCallback, logCallback) {
         port: 30958,
         username: 'maleon17',
         version: '1.20.1',
-        auth: 'offline',
-        forgeMods: []
+        auth: 'offline'
+    })
+
+    forgeHandshake(client, {
+        forgeMods: [],
+        channels: []
     })
 
     client.on('login', () => {
