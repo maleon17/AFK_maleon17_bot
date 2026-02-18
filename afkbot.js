@@ -1,5 +1,5 @@
 const mineflayer = require('mineflayer')
-const autoeat = require('mineflayer-auto-eat').plugin
+const { plugin: autoeat } = require('mineflayer-auto-eat')
 
 let bot = null
 let isRunning = false
@@ -18,7 +18,7 @@ function startBot(verifyCallback, logCallback) {
         auth: 'offline'
     })
 
-    bot.loadPlugin(autoeat)
+    bot.loadPlugin(autoeatPlugin)
 
     bot.on('login', () => {
         isRunning = true
