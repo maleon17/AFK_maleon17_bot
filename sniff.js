@@ -86,27 +86,41 @@ client.on('login_plugin_request', (packet) => {
 
             console.log('  Mods: ' + mods.length)
 
-            // Попробуем БЕЗ обёртки loginwrapper — только голый payload
-            const innerParts = [writeVarInt(1), writeVarInt(mods.length)]
+            // Внутренний payload: type(1) + modCount + modIds + channels(0) + registries(0)
+            const replyParts = [writeVarInt(1), writeVarInt(mods.length)]
             for (const mod of mods) {
-                innerParts.push(writeString(mod))
+                replyParts.push(writeString(mod))
             }
-            innerParts.push(writeVarInt(0))
-            innerParts.push(writeVarInt(0))
-            const innerPayload = Buffer.concat(innerParts)
+            replyParts.push(writeVarInt(0))
+            replyParts.push(writeVarInt(0))
+            const replyPayload = Buffer.concat(replyParts)
 
-            // Вариант: varint(len) + payload (как сервер отправляет)
-            const response = Buffer.concat([writeVarInt(innerPayload.length), innerPayload])
+            // Формат как у сервера: nameLen(1 byte) + name + varint(payloadLen) + payload
+            const nameBuf = Buffer.from('fml:handshake')
+            const response = Buffer.concat([
+                Buffer.from([nameBuf.length]),
+                nameBuf,
+                writeVarInt(replyPayload.length),
+                replyPayload
+            ])
 
-            console.log('  response len: ' + response.length)
-            console.log('  response hex: ' + response.slice(0, 30).toString('hex'))
+            console.log('  -> ModListReply')
+            console.log('  server format: ' + packet.data.slice(0, 20).toString('hex'))
+            console.log('  our   format: ' + response.slice(0, 20).toString('hex'))
 
             client.write('login_plugin_response', { messageId: packet.messageId, data: response })
 
         } else {
+            // Ack: nameLen + name + varint(1) + type(2)
+            const nameBuf = Buffer.from('fml:handshake')
+            const ackPayload = writeVarInt(2)
+            const response = Buffer.concat([
+                Buffer.from([nameBuf.length]),
+                nameBuf,
+                writeVarInt(ackPayload.length),
+                ackPayload
+            ])
             console.log('  -> Ack')
-            const payload = writeVarInt(2)
-            const response = Buffer.concat([writeVarInt(payload.length), payload])
             client.write('login_plugin_response', { messageId: packet.messageId, data: response })
         }
     } else if (innerChannel === 'tacz:handshake' || innerChannel === 'tacztweaks:handshake') {
