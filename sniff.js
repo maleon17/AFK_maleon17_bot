@@ -107,7 +107,7 @@ client.on('login_plugin_request', (packet) => {
         } else {
             console.log('  -> empty ack (type=' + typeInfo.value + ')')
             const nameBuf = Buffer.from('fml:handshake')
-            const ackPayload = Buffer.from([0x02])
+            const ackPayload = Buffer.from([0x03])
             const response = Buffer.concat([
                 Buffer.from([nameBuf.length]),
                 nameBuf,
