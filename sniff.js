@@ -84,9 +84,9 @@ client.on('login_plugin_request', (packet) => {
                 mods.push(modId.value)
             }
 
-            console.log('  Mods: ' + mods.length + ' -> C2SModListReply')
+            console.log('  Mods: ' + mods.length)
 
-            // Собираем ТОЛЬКО внутренний payload
+            // Попробуем БЕЗ обёртки loginwrapper — только голый payload
             const innerParts = [writeVarInt(1), writeVarInt(mods.length)]
             for (const mod of mods) {
                 innerParts.push(writeString(mod))
@@ -95,29 +95,18 @@ client.on('login_plugin_request', (packet) => {
             innerParts.push(writeVarInt(0))
             const innerPayload = Buffer.concat(innerParts)
 
-            // Оборачиваем как loginwrapper: channelNameLen + channelName + varint(innerLen) + innerPayload
-            const channelBuf = Buffer.from('fml:handshake')
-            const response = Buffer.concat([
-                writeVarInt(channelBuf.length),
-                channelBuf,
-                writeVarInt(innerPayload.length),
-                innerPayload
-            ])
+            // Вариант: varint(len) + payload (как сервер отправляет)
+            const response = Buffer.concat([writeVarInt(innerPayload.length), innerPayload])
 
-            console.log('  response hex start: ' + response.slice(0, 30).toString('hex'))
+            console.log('  response len: ' + response.length)
+            console.log('  response hex: ' + response.slice(0, 30).toString('hex'))
 
             client.write('login_plugin_response', { messageId: packet.messageId, data: response })
 
         } else {
-            console.log('  -> C2SAcknowledge')
-            const innerPayload = writeVarInt(2)
-            const channelBuf = Buffer.from('fml:handshake')
-            const response = Buffer.concat([
-                writeVarInt(channelBuf.length),
-                channelBuf,
-                writeVarInt(innerPayload.length),
-                innerPayload
-            ])
+            console.log('  -> Ack')
+            const payload = writeVarInt(2)
+            const response = Buffer.concat([writeVarInt(payload.length), payload])
             client.write('login_plugin_response', { messageId: packet.messageId, data: response })
         }
     } else if (innerChannel === 'tacz:handshake' || innerChannel === 'tacztweaks:handshake') {
@@ -138,20 +127,4 @@ client.on('disconnect', (packet) => {
         } else if (reason.translate) {
             console.log('\nDISCONNECT:', reason.translate)
         } else {
-            console.log('\nDISCONNECT:', JSON.stringify(reason).substring(0, 500))
-        }
-    } catch(e) {
-        console.log('\nDISCONNECT:', JSON.stringify(packet).substring(0, 500))
-    }
-    process.exit()
-})
-
-client.on('kick_disconnect', (packet) => {
-    console.log('KICKED:', JSON.stringify(packet).substring(0, 500))
-    process.exit()
-})
-
-client.on('error', (err) => console.log('ERROR:', err.message))
-client.on('end', () => { console.log('DISCONNECTED'); process.exit() })
-
-setTimeout(() => { console.log('TIMEOUT after #' + requestNum); process.exit() }, 30000)
+            console.log('\nDISCONNECT:', 
