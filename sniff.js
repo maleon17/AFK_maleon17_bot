@@ -57,7 +57,6 @@ function makeWrappedResponse(channelName, payload) {
 }
 
 let requestNum = 0
-let pendingTacz = []
 
 client.on('login_plugin_request', (packet) => {
     let innerChannel = ''
@@ -95,8 +94,7 @@ client.on('login_plugin_request', (packet) => {
                 mods.push(modId.value)
             }
 
-            console.log('  Mods: ' + mods.length + ' -> C2SModListReply (type=1)')
-
+            // Дампнем ответ в hex для дебага
             const parts = [writeVarInt(1), writeVarInt(mods.length)]
             for (const mod of mods) {
                 parts.push(writeString(mod))
@@ -104,28 +102,23 @@ client.on('login_plugin_request', (packet) => {
             parts.push(writeVarInt(0))
             parts.push(writeVarInt(0))
 
-            const response = makeWrappedResponse('fml:handshake', Buffer.concat(parts))
-            client.write('login_plugin_response', { messageId: packet.messageId, data: response })
+            const payload = Buffer.concat(parts)
+            console.log('  payload first 30 hex: ' + payload.slice(0, 30).toString('hex'))
+            console.log('  payload length: ' + payload.length)
 
-            // ПОСЛЕ ModListReply отвечаем на отложенные tacz
-            for (const p of pendingTacz) {
-                console.log('  -> deferred tacz echo (id: ' + p.messageId + ')')
-                client.write('login_plugin_response', { messageId: p.messageId, data: p.data })
-            }
-            pendingTacz = []
+            const response = makeWrappedResponse('fml:handshake', payload)
+            console.log('  response first 30 hex: ' + response.slice(0, 30).toString('hex'))
+            console.log('  response length: ' + response.length)
+            console.log('  Mods: ' + mods.length + ' -> C2SModListReply')
+
+            client.write('login_plugin_response', { messageId: packet.messageId, data: response })
 
         } else {
             console.log('  -> C2SAcknowledge (type=2)')
             const response = makeWrappedResponse('fml:handshake', writeVarInt(2))
             client.write('login_plugin_response', { messageId: packet.messageId, data: response })
         }
-    } else if (innerChannel === 'tacz:handshake' && innerData.length <= 10) {
-        console.log('  -> deferred')
-        pendingTacz.push(packet)
     } else if (innerChannel === 'tacz:handshake' || innerChannel === 'tacztweaks:handshake') {
-        console.log('  -> echo')
-        client.write('login_plugin_response', { messageId: packet.messageId, data: packet.data })
-    } else {
         console.log('  -> echo')
         client.write('login_plugin_response', { messageId: packet.messageId, data: packet.data })
     }
@@ -139,12 +132,14 @@ client.on('disconnect', (packet) => {
     try {
         const reason = JSON.parse(packet.reason)
         if (reason.with) {
-            console.log('DISCONNECT after #' + requestNum + ':', reason.with[0].substring(0, 500))
+            console.log('\nDISCONNECT:', reason.with[0].substring(0, 500))
+        } else if (reason.translate) {
+            console.log('\nDISCONNECT:', reason.translate)
         } else {
-            console.log('DISCONNECT after #' + requestNum + ':', JSON.stringify(reason).substring(0, 500))
+            console.log('\nDISCONNECT:', JSON.stringify(reason).substring(0, 500))
         }
     } catch(e) {
-        console.log('DISCONNECT:', JSON.stringify(packet).substring(0, 500))
+        console.log('\nDISCONNECT:', JSON.stringify(packet).substring(0, 500))
     }
     process.exit()
 })
