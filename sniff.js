@@ -46,16 +46,6 @@ function readString(buffer, offset) {
     return { value: str, totalLength: lenInfo.length + lenInfo.value }
 }
 
-function makeWrappedResponse(channelName, payload) {
-    const channelBuf = Buffer.from(channelName)
-    const innerPayload = Buffer.concat([writeVarInt(payload.length), payload])
-    return Buffer.concat([
-        Buffer.from([channelBuf.length]),
-        channelBuf,
-        innerPayload
-    ])
-}
-
 let requestNum = 0
 
 client.on('login_plugin_request', (packet) => {
@@ -94,28 +84,40 @@ client.on('login_plugin_request', (packet) => {
                 mods.push(modId.value)
             }
 
-            // Дампнем ответ в hex для дебага
-            const parts = [writeVarInt(1), writeVarInt(mods.length)]
-            for (const mod of mods) {
-                parts.push(writeString(mod))
-            }
-            parts.push(writeVarInt(0))
-            parts.push(writeVarInt(0))
-
-            const payload = Buffer.concat(parts)
-            console.log('  payload first 30 hex: ' + payload.slice(0, 30).toString('hex'))
-            console.log('  payload length: ' + payload.length)
-
-            const response = makeWrappedResponse('fml:handshake', payload)
-            console.log('  response first 30 hex: ' + response.slice(0, 30).toString('hex'))
-            console.log('  response length: ' + response.length)
             console.log('  Mods: ' + mods.length + ' -> C2SModListReply')
+
+            // Собираем ТОЛЬКО внутренний payload
+            const innerParts = [writeVarInt(1), writeVarInt(mods.length)]
+            for (const mod of mods) {
+                innerParts.push(writeString(mod))
+            }
+            innerParts.push(writeVarInt(0))
+            innerParts.push(writeVarInt(0))
+            const innerPayload = Buffer.concat(innerParts)
+
+            // Оборачиваем как loginwrapper: channelNameLen + channelName + varint(innerLen) + innerPayload
+            const channelBuf = Buffer.from('fml:handshake')
+            const response = Buffer.concat([
+                writeVarInt(channelBuf.length),
+                channelBuf,
+                writeVarInt(innerPayload.length),
+                innerPayload
+            ])
+
+            console.log('  response hex start: ' + response.slice(0, 30).toString('hex'))
 
             client.write('login_plugin_response', { messageId: packet.messageId, data: response })
 
         } else {
-            console.log('  -> C2SAcknowledge (type=2)')
-            const response = makeWrappedResponse('fml:handshake', writeVarInt(2))
+            console.log('  -> C2SAcknowledge')
+            const innerPayload = writeVarInt(2)
+            const channelBuf = Buffer.from('fml:handshake')
+            const response = Buffer.concat([
+                writeVarInt(channelBuf.length),
+                channelBuf,
+                writeVarInt(innerPayload.length),
+                innerPayload
+            ])
             client.write('login_plugin_response', { messageId: packet.messageId, data: response })
         }
     } else if (innerChannel === 'tacz:handshake' || innerChannel === 'tacztweaks:handshake') {
