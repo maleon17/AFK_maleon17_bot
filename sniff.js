@@ -127,4 +127,20 @@ client.on('disconnect', (packet) => {
         } else if (reason.translate) {
             console.log('\nDISCONNECT:', reason.translate)
         } else {
-            console.log('\nDISCONNECT:', 
+            console.log('\nDISCONNECT:', JSON.stringify(reason).substring(0, 500))
+        }
+    } catch(e) {
+        console.log('\nDISCONNECT:', JSON.stringify(packet).substring(0, 500))
+    }
+    process.exit()
+})
+
+client.on('kick_disconnect', (packet) => {
+    console.log('KICKED:', JSON.stringify(packet).substring(0, 500))
+    process.exit()
+})
+
+client.on('error', (err) => console.log('ERROR:', err.message))
+client.on('end', () => { console.log('DISCONNECTED'); process.exit() })
+
+setTimeout(() => { console.log('TIMEOUT after #' + requestNum); process.exit() }, 30000)
