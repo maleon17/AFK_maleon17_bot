@@ -112,7 +112,7 @@ client.on('login_plugin_request', (packet) => {
         } else {
             console.log('  -> echo (type=' + typeInfo.value + ')')
             client.write('login_plugin_response', { messageId: packet.messageId, data: packet.data })
-        }
+        })
             client.write('login_plugin_response', { messageId: packet.messageId, data: response })
         }
     } else if (innerChannel === 'tacz:handshake' || innerChannel === 'tacztweaks:handshake') {
