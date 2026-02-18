@@ -17,11 +17,13 @@ function startBot(verifyCallback, logCallback) {
         port: 30958,
         username: 'maleon17',
         version: '1.20.1',
-        auth: 'offline',
-        // Притворяемся Forge клиентом
-        fakeHost: 'donator2.gamely.pro\0FML3\0',
+        auth: 'offline'
     })
 
+    // Полностью игнорируем Forge запросы
+    client.on('login_plugin_request', (packet) => {
+        console.log('Forge plugin request:', packet.channel)
+    })
 
     client.on('login', () => {
         isRunning = true
