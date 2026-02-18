@@ -10,8 +10,8 @@ function startBot(verifyCallback, logCallback) {
     sendLog = logCallback
 
     bot = mineflayer.createBot({
-        host: 'IP_СЕРВЕРА',
-        port: 25565,
+        host: 'donator2.gamely.pro',
+        port: 30958,
         username: 'maleon17',
         version: '1.20.1',
         auth: 'offline'
