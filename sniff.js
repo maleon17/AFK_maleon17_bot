@@ -40,6 +40,20 @@ function writeString(str) {
     return Buffer.concat([writeVarInt(buf.length), buf])
 }
 
+// Список модов сервера
+const SERVER_MODS = [
+    'minecraft', 'forge', 'captureofzones', 'takkit', 'rationcraft',
+    'caps_awim_tactical_gear_rework', 'wool_bands', 'voidlessframework',
+    'voicechat', 'prefix_teb', 'mixinsquared', 'creativecore',
+    'survival_instinct', 'kit_for_teb', 'walkietalkie', 'personality',
+    'lrtactical', 'kotlinforforge', 'flywheel', 'ponder', 'create',
+    'createdeco', 'framedblocks', 'lexiconfig', 'endlessammo',
+    'mobsunscreen', 'soldiersdelight', 'parcool', 'chamber_clarity',
+    'suppressionmod', 'fracturepoint', 'taczxgunlightsaddon',
+    'ferritecore', 'yet_another_config_lib_v3', 'simpleradio',
+    'skinrestorer', 'click2pick'
+]
+
 let requestNum = 0
 
 client.on('login_plugin_request', (packet) => {
@@ -61,28 +75,26 @@ client.on('login_plugin_request', (packet) => {
         
         console.log('#' + packet.messageId + ' fml:handshake type=' + typeInfo.value + ' len=' + lenInfo.value)
 
-        let innerPayload
         const channelBuf = Buffer.from('fml:handshake')
+        let innerPayload
 
         if (typeInfo.value === 5) {
-            // ModList -> ответ type=2 (ModListReply)
-            console.log('  -> ModListReply')
+            console.log('  -> ModListReply with ' + SERVER_MODS.length + ' mods')
             
-            // Формат: type(2) + varint(0 mods) + varint(0 channels) + varint(0 registries)
-            const replyData = Buffer.concat([
-                writeVarInt(2),    // type = ModListReply
-                writeVarInt(0),    // 0 mods
-                writeVarInt(0),    // 0 channels  
-                writeVarInt(0)     // 0 registries
-            ])
+            // type=2 + varint(mod count) + mod strings + varint(0 channels) + varint(0 registries)
+            const parts = [writeVarInt(2), writeVarInt(SERVER_MODS.length)]
+            for (const mod of SERVER_MODS) {
+                parts.push(writeString(mod))
+            }
+            parts.push(writeVarInt(0)) // 0 channels
+            parts.push(writeVarInt(0)) // 0 registries
             
+            const replyData = Buffer.concat(parts)
             innerPayload = Buffer.concat([writeVarInt(replyData.length), replyData])
             
         } else {
-            // Acknowledgement для всех остальных
             console.log('  -> Ack (type ' + typeInfo.value + ')')
-            
-            const replyData = Buffer.concat([writeVarInt(99)]) // 99 = 0x63 = ack
+            const replyData = writeVarInt(99)
             innerPayload = Buffer.concat([writeVarInt(replyData.length), replyData])
         }
 
