@@ -6,13 +6,12 @@ const client = mc.createClient({
     username: 'maleon17',
     version: '1.20.1',
     auth: 'offline',
-    hideErrors: false
+    fakeHost: 'donator2.gamely.pro\0FML3\0'
 })
 
-// Логируем ВСЕ входящие пакеты
 client.on('packet', (data, meta) => {
     if (meta.state === 'login') {
-        console.log(`[${meta.state}] ${meta.name}:`, JSON.stringify(data).substring(0, 500))
+        console.log('[' + meta.state + '] ' + meta.name + ':', JSON.stringify(data).substring(0, 500))
     }
 })
 
