@@ -57,15 +57,8 @@ function makeWrappedResponse(channelName, payload) {
 }
 
 let requestNum = 0
-let answeredIds = new Set()
 
 client.on('login_plugin_request', (packet) => {
-    // Пропускаем повторные
-    if (answeredIds.has(packet.messageId)) {
-        console.log('#' + packet.messageId + ' ПОВТОРНЫЙ - пропускаем')
-        return
-    }
-
     let innerChannel = ''
     let innerData = Buffer.alloc(0)
 
@@ -86,6 +79,7 @@ client.on('login_plugin_request', (packet) => {
         console.log('  fml type=' + typeInfo.value)
 
         if (typeInfo.value === 5) {
+            // S2CModList -> C2SModListReply (type=1)
             let offset = typeInfo.length
             const modCount = readVarInt(dataAfterLen, offset)
             offset += modCount.length
@@ -101,32 +95,31 @@ client.on('login_plugin_request', (packet) => {
                 mods.push(modId.value)
             }
 
-            console.log('  Mods: ' + mods.length + ' -> ModListReply')
+            console.log('  Mods: ' + mods.length + ' -> C2SModListReply (type=1)')
 
-            const parts = [writeVarInt(2), writeVarInt(mods.length)]
+            // C2SModListReply: type(1) + modCount + modIds + channelCount(0) + registryCount(0)
+            const parts = [writeVarInt(1), writeVarInt(mods.length)]
             for (const mod of mods) {
                 parts.push(writeString(mod))
             }
-            parts.push(writeVarInt(0))
-            parts.push(writeVarInt(0))
+            parts.push(writeVarInt(0)) // channels
+            parts.push(writeVarInt(0)) // registries
 
             const response = makeWrappedResponse('fml:handshake', Buffer.concat(parts))
             client.write('login_plugin_response', { messageId: packet.messageId, data: response })
-            answeredIds.add(packet.messageId)
+
         } else {
-            console.log('  -> Ack')
-            const response = makeWrappedResponse('fml:handshake', writeVarInt(99))
+            // Все остальные -> C2SAcknowledge (type=2)
+            console.log('  -> C2SAcknowledge (type=2)')
+            const response = makeWrappedResponse('fml:handshake', writeVarInt(2))
             client.write('login_plugin_response', { messageId: packet.messageId, data: response })
-            answeredIds.add(packet.messageId)
         }
     } else if (innerChannel === 'tacz:handshake' || innerChannel === 'tacztweaks:handshake') {
         console.log('  -> echo')
         client.write('login_plugin_response', { messageId: packet.messageId, data: packet.data })
-        answeredIds.add(packet.messageId)
     } else {
         console.log('  -> echo')
         client.write('login_plugin_response', { messageId: packet.messageId, data: packet.data })
-        answeredIds.add(packet.messageId)
     }
 })
 
