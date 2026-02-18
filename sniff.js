@@ -110,17 +110,9 @@ client.on('login_plugin_request', (packet) => {
             client.write('login_plugin_response', { messageId: packet.messageId, data: response })
 
         } else {
-            // Для type 1,2,3,4 — ack тем же типом
-            console.log('  -> Ack (type=' + typeInfo.value + ')')
-            
-            const nameBuf = Buffer.from('fml:handshake')
-            const ackPayload = writeVarInt(99)
-            const response = Buffer.concat([
-                Buffer.from([nameBuf.length]),
-                nameBuf,
-                writeVarInt(ackPayload.length),
-                ackPayload
-            ])
+            console.log('  -> echo (type=' + typeInfo.value + ')')
+            client.write('login_plugin_response', { messageId: packet.messageId, data: packet.data })
+        }
             client.write('login_plugin_response', { messageId: packet.messageId, data: response })
         }
     } else if (innerChannel === 'tacz:handshake' || innerChannel === 'tacztweaks:handshake') {
