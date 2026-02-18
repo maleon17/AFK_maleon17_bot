@@ -79,13 +79,6 @@ client.on('login_plugin_request', (packet) => {
 
         console.log('  fml type=' + typeInfo.value)
 
-        // Сначала ответим на все ожидающие tacz
-        for (const p of pendingTacz) {
-            console.log('  -> deferred tacz echo (id: ' + p.messageId + ')')
-            client.write('login_plugin_response', { messageId: p.messageId, data: p.data })
-        }
-        pendingTacz = []
-
         if (typeInfo.value === 5) {
             let offset = typeInfo.length
             const modCount = readVarInt(dataAfterLen, offset)
@@ -114,13 +107,19 @@ client.on('login_plugin_request', (packet) => {
             const response = makeWrappedResponse('fml:handshake', Buffer.concat(parts))
             client.write('login_plugin_response', { messageId: packet.messageId, data: response })
 
+            // ПОСЛЕ ModListReply отвечаем на отложенные tacz
+            for (const p of pendingTacz) {
+                console.log('  -> deferred tacz echo (id: ' + p.messageId + ')')
+                client.write('login_plugin_response', { messageId: p.messageId, data: p.data })
+            }
+            pendingTacz = []
+
         } else {
             console.log('  -> C2SAcknowledge (type=2)')
             const response = makeWrappedResponse('fml:handshake', writeVarInt(2))
             client.write('login_plugin_response', { messageId: packet.messageId, data: response })
         }
     } else if (innerChannel === 'tacz:handshake' && innerData.length <= 10) {
-        // Маленький tacz — откладываем
         console.log('  -> deferred')
         pendingTacz.push(packet)
     } else if (innerChannel === 'tacz:handshake' || innerChannel === 'tacztweaks:handshake') {
@@ -134,11 +133,6 @@ client.on('login_plugin_request', (packet) => {
 
 client.on('login', () => {
     console.log('\n*** SUCCESS! ***')
-    // Отвечаем на оставшиеся tacz
-    for (const p of pendingTacz) {
-        client.write('login_plugin_response', { messageId: p.messageId, data: p.data })
-    }
-    pendingTacz = []
 })
 
 client.on('disconnect', (packet) => {
