@@ -21,17 +21,6 @@ function readVarInt(buffer, offset) {
     return { value, length }
 }
 
-function writeVarInt(value) {
-    const bytes = []
-    do {
-        let b = value & 0x7F
-        value >>>= 7
-        if (value !== 0) b |= 0x80
-        bytes.push(b)
-    } while (value !== 0)
-    return Buffer.from(bytes)
-}
-
 client.on('login_plugin_request', (packet) => {
     let innerChannel = ''
     let innerData = Buffer.alloc(0)
@@ -47,7 +36,6 @@ client.on('login_plugin_request', (packet) => {
     // === 1. TACZ HANDSHAKE ===
     if (innerChannel === 'tacz:handshake') {
         console.log('[TACZ] Отвечаем версией протокола (0x02)')
-        // Только payload, без названия канала!
         const responseData = Buffer.from([0x02])
         
         client.write('login_plugin_response', { 
@@ -71,29 +59,48 @@ client.on('login_plugin_request', (packet) => {
 
     // === 3. FML HANDSHAKE ===
     if (innerChannel === 'fml:handshake' && innerData.length > 0) {
-        const typeInfo = readVarInt(innerData, 0)
+        console.log(`[FML] Raw start (hex): ${innerData.slice(0, 10).toString('hex')}`)
+        
+        let offset = 0
+        
+        // 1. Читаем длину пакета (пропускаем)
+        const packetLenInfo = readVarInt(innerData, offset)
+        offset += packetLenInfo.length
+        console.log(`[FML] Packet length varint: ${packetLenInfo.value}, bytes: ${packetLenInfo.length}`)
+        
+        // 2. Теперь читаем тип пакета
+        const typeInfo = readVarInt(innerData, offset)
         const type = typeInfo.value
+        offset += typeInfo.length
         
-        console.log(`[FML] Packet Type: ${type}`)
+        console.log(`[FML] Correct Packet Type: ${type}`)
         
-        // Тип 5 = ModList
-        if (type === 5) {
-            console.log('[FML] ModList запрос. Отвечаем ЭХОМ (только payload)')
+        // 3. Проверяем, нормальный ли тип (1-10)
+        if (type >= 1 && type <= 10) {
+            console.log(`[FML] Known type ${type}`)
             
-            // ВАЖНО: Отправляем обратно только innerData, без приклеивания канала
+            // Тип 2 = ModList, тип 5 = ModListReply
+            if (type === 2 || type === 5) {
+                console.log('[FML] ModList detected. Echoing back the entire innerData...')
+                
+                client.write('login_plugin_response', { 
+                    messageId: packet.messageId, 
+                    data: innerData 
+                })
+            } else {
+                console.log(`[FML] Unknown FML type ${type}, sending null`)
+                client.write('login_plugin_response', { 
+                    messageId: packet.messageId, 
+                    data: null 
+                })
+            }
+        } else {
+            console.log(`[FML] Type ${type} is weird, sending null`)
             client.write('login_plugin_response', { 
                 messageId: packet.messageId, 
-                data: innerData 
+                data: null 
             })
-            return
         }
-        
-        // На другие типы FML отвечаем null
-        console.log('[FML] Неизвестный тип, отвечаем null')
-        client.write('login_plugin_response', { 
-            messageId: packet.messageId, 
-            data: null 
-        })
         return
     }
 
