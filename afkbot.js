@@ -3,9 +3,12 @@ const autoeat = require('mineflayer-auto-eat').plugin
 
 let bot = null
 let isRunning = false
+let sendLog = null // функция для отправки логов в ТГ
 
-function startBot(verifyCallback) {
+function startBot(verifyCallback, logCallback) {
     if (isRunning) return 'Бот уже на сервере'
+
+    sendLog = logCallback
 
     bot = mineflayer.createBot({
         host: 'IP_СЕРВЕРА',
@@ -18,56 +21,58 @@ function startBot(verifyCallback) {
     bot.loadPlugin(autoeat)
 
     bot.on('login', () => {
-        console.log('✅ Бот зашёл на сервер')
         isRunning = true
+        sendLog('✅ Бот зашёл на сервер')
     })
 
     bot.on('spawn', () => {
-        // Настройка автоеды
         bot.autoEat.options = {
             priority: 'foodPoints',
             startAt: 14,
             bannedFood: []
         }
-
-        // Анти-АФК: прыжки каждые 2 минуты
-        setInterval(() => {
-            if (isRunning) {
-                bot.setControlState('jump', true)
-                setTimeout(() => bot.setControlState('jump', false), 500)
-            }
-        }, 120000)
     })
 
-    // Ловим сообщение с просьбой ввести /verify
     bot.on('message', (message) => {
         const text = message.toString()
-        console.log(`[CHAT] ${text}`)
 
         if (text.includes('/verify') || text.includes('подтверждение входа')) {
             if (verifyCallback) verifyCallback(text)
         }
     })
 
+    bot.on('health', () => {
+        if (bot.food <= 6) {
+            sendLog(`⚠️ Голод критический: ${bot.food}/20`)
+        }
+        if (bot.health <= 5) {
+            sendLog(`🚨 HP критическое: ${bot.health}/20`)
+        }
+    })
+
+    bot.on('death', () => {
+        sendLog('💀 Бот умер! Респаун...')
+    })
+
     bot.on('kicked', (reason) => {
-        console.log('❌ Кикнут:', reason)
         isRunning = false
         bot = null
+        sendLog(`❌ Кикнут: ${reason}`)
     })
 
     bot.on('error', (err) => {
-        console.log('Ошибка:', err.message)
         isRunning = false
         bot = null
+        sendLog(`🔴 Ошибка: ${err.message}`)
     })
 
     bot.on('end', () => {
-        console.log('Отключён')
         isRunning = false
         bot = null
+        sendLog('🔌 Отключён от сервера')
     })
 
-    return 'Подключаюсь к серверу...'
+    return '⏳ Подключаюсь к серверу...'
 }
 
 function stopBot() {
@@ -75,20 +80,25 @@ function stopBot() {
     bot.quit()
     isRunning = false
     bot = null
-    return 'Бот вышел с сервера'
+    return '👋 Бот вышел с сервера'
 }
 
 function sendVerify(code) {
     if (!bot || !isRunning) return 'Бот не на сервере'
     bot.chat(`/verify ${code}`)
-    return `Отправлено: /verify ${code}`
+    return `✅ Отправлено: /verify ${code}`
 }
 
 function getStatus() {
-    if (!isRunning || !bot) return 'Оффлайн'
+    if (!isRunning || !bot) return '🔴 Оффлайн'
     const health = bot.health || '?'
     const food = bot.food || '?'
-    return `Онлайн\n❤️ HP: ${health}\n🍖 Голод: ${food}`
+    const pos = bot.entity ? bot.entity.position : null
+    let status = `🟢 Онлайн\n❤️ HP: ${health}/20\n🍖 Голод: ${food}/20`
+    if (pos) {
+        status += `\n📍 X:${Math.round(pos.x)} Y:${Math.round(pos.y)} Z:${Math.round(pos.z)}`
+    }
+    return status
 }
 
 module.exports = { startBot, stopBot, sendVerify, getStatus }
