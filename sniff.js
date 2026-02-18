@@ -13,45 +13,41 @@ let requestCount = 0
 
 client.on('login_plugin_request', (packet) => {
     requestCount++
-    console.log('Request #' + requestCount + ' channel:', packet.channel)
+    console.log('\n=== Request #' + requestCount + ' ===')
     console.log('messageId:', packet.messageId)
+    console.log('channel:', packet.channel)
+    
+    const hex = packet.data ? packet.data.toString('hex') : 'null'
+    const utf8 = packet.data ? packet.data.toString('utf8').replace(/[^\x20-\x7E]/g, '.') : 'null'
+    
+    console.log('data hex:', hex.substring(0, 200))
+    console.log('data readable:', utf8.substring(0, 200))
+    
+    // Первые байты показывают вложенный канал
+    if (packet.data && packet.data.length > 0) {
+        const nameLen = packet.data[0]
+        const innerChannel = packet.data.slice(1, 1 + nameLen).toString('utf8')
+        console.log('inner channel:', innerChannel)
+        console.log('inner data hex:', packet.data.slice(1 + nameLen).toString('hex').substring(0, 200))
+    }
 
-    if (packet.channel === 'fml:loginwrapper') {
-        // Определяем какой это запрос по данным
-        const dataStr = packet.data ? packet.data.toString('utf8') : ''
-
-        if (dataStr.includes('tacz:handshake')) {
-            console.log('-> Отвечаем на tacz:handshake')
-            // Пустой успешный ответ
-            const response = Buffer.from([
-                14, // длина строки "tacz:handshake"
-                ...Buffer.from('tacz:handshake'),
-                0   // пустой ответ
-            ])
-            client.write('login_plugin_response', {
-                messageId: packet.messageId,
-                data: response
-            })
-        } else if (dataStr.includes('tacztweak')) {
-            console.log('-> Отвечаем на tacztweaks:handshake')
-            const response = Buffer.from([
-                20, // длина строки "tacztweaks:handshake"
-                ...Buffer.from('tacztweaks:handshake'),
-                0   // пустой ответ
-            ])
-            client.write('login_plugin_response', {
-                messageId: packet.messageId,
-                data: response
-            })
-        } else {
-            console.log('-> Неизвестный запрос, отвечаем пустым')
-            client.write('login_plugin_response', {
-                messageId: packet.messageId,
-                data: Buffer.alloc(0)
-            })
-        }
+    // Отвечаем на все запросы
+    if (packet.channel === 'fml:loginwrapper' && packet.data) {
+        const nameLen = packet.data[0]
+        const innerChannel = packet.data.slice(1, 1 + nameLen).toString('utf8')
+        
+        const response = Buffer.alloc(2 + innerChannel.length)
+        response[0] = innerChannel.length
+        response.write(innerChannel, 1)
+        response[1 + innerChannel.length] = 0
+        
+        console.log('-> Отвечаем на:', innerChannel)
+        
+        client.write('login_plugin_response', {
+            messageId: packet.messageId,
+            data: response
+        })
     } else {
-        // Не fml:loginwrapper — отвечаем null
         client.write('login_plugin_response', {
             messageId: packet.messageId,
             data: null
@@ -60,13 +56,16 @@ client.on('login_plugin_request', (packet) => {
 })
 
 client.on('login', () => {
-    console.log('SUCCESS! Logged in!')
+    console.log('\n*** SUCCESS! Logged in! ***')
 })
 
-client.on('packet', (data, meta) => {
-    if (meta.state === 'login' && meta.name !== 'login_plugin_request') {
-        console.log('[' + meta.state + '] ' + meta.name)
-    }
+client.on('disconnect', (packet) => {
+    console.log('DISCONNECT:', JSON.stringify(packet).substring(0, 300))
+})
+
+client.on('kick_disconnect', (packet) => {
+    console.log('KICKED:', JSON.stringify(packet).substring(0, 300))
+    process.exit()
 })
 
 client.on('error', (err) => {
@@ -78,12 +77,7 @@ client.on('end', () => {
     process.exit()
 })
 
-client.on('kick_disconnect', (packet) => {
-    console.log('KICKED:', JSON.stringify(packet).substring(0, 200))
-    process.exit()
-})
-
 setTimeout(() => {
-    console.log('TIMEOUT - no more packets')
+    console.log('TIMEOUT')
     process.exit()
 }, 15000)
