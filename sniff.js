@@ -30,32 +30,19 @@ setTimeout(() => {
     console.log('Отвечаем...\n')
 
     for (const { packet, innerChannel } of requests) {
-        let response
-
         if (innerChannel === 'fml:handshake') {
-            // FML3: ответ обёрнут в loginwrapper
-            // Формат: varint(len(channelName)) + channelName + acknowledgement(0x63)
-            const channelBuf = Buffer.from('fml:handshake')
-            response = Buffer.alloc(1 + channelBuf.length + 1)
-            response[0] = channelBuf.length
-            channelBuf.copy(response, 1)
-            response[1 + channelBuf.length] = 0x63 // acknowledgement byte
-
-            // Но может сервер ожидает varint формат
-            // Попробуем другой формат: просто acknowledgement
+            // Acknowledgement
+            client.write('login_plugin_response', {
+                messageId: packet.messageId,
+                data: Buffer.from([0x63])
+            })
         } else {
-            // tacz и tacztweaks — пустой ответ
-            const channelBuf = Buffer.from(innerChannel)
-            response = Buffer.alloc(1 + channelBuf.length + 1)
-            response[0] = channelBuf.length
-            channelBuf.copy(response, 1)
-            response[1 + channelBuf.length] = 0x01
+            // tacz, tacztweaks — не поддерживаем
+            client.write('login_plugin_response', {
+                messageId: packet.messageId,
+                data: null
+            })
         }
-
-        client.write('login_plugin_response', {
-            messageId: packet.messageId,
-            data: response
-        })
     }
 }, 5000)
 
@@ -64,7 +51,6 @@ client.on('login', () => {
 })
 
 client.on('disconnect', (packet) => {
-    // Парсим причину подробнее
     try {
         const reason = JSON.parse(packet.reason)
         if (reason.with) {
