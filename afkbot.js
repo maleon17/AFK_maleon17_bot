@@ -291,18 +291,19 @@ if (id === 0x3C) {
 // ===== Отправка команды =====
 function sendCommand(cmd) {
     if (!sock || !isRunning) return
-    // Chat Command packet 0x04
     const cmdBuf = Buffer.from(cmd, 'utf8')
     const timestamp = Buffer.alloc(8)
     const salt = Buffer.alloc(8)
-    const payload = Buffer.concat([
+    const body = Buffer.concat([
+        writeVarInt(0x04),           // Chat Command packet id
         writeVarInt(cmdBuf.length), cmdBuf,
         timestamp, salt,
-        writeVarInt(0), // no signatures
+        writeVarInt(0),              // no signatures
         writeVarInt(0),
-        Buffer.alloc(3) // acknowledged
+        Buffer.alloc(3)              // acknowledged
     ])
-    sendPacket(0x04, payload)
+    const inner = Buffer.concat([writeVarInt(0), body])
+    sock.write(Buffer.concat([writeVarInt(inner.length), inner]))
     console.log(`[CMD] /${cmd}`)
 }
 
