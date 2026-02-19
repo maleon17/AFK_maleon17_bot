@@ -9,7 +9,6 @@ const client = mc.createClient({
     fakeHost: 'donator2.gamely.pro\0FML3\0'
 })
 
-// === Вспомогательные функции ===
 function readVarInt(buffer, offset) {
     let value = 0, length = 0, currentByte
     do {
@@ -44,136 +43,164 @@ function writeString(str) {
     return Buffer.concat([writeVarInt(buf.length), buf])
 }
 
-// Отправка ответа через fml:loginwrapper
-function sendWrapperResponse(packet, innerChannel, innerPayload) {
-    const channelBuf = Buffer.from(innerChannel, 'utf8')
-    // Формат: [Длина канала][Канал][Данные]
-    const responseData = Buffer.concat([
-        Buffer.from([channelBuf.length]),
-        channelBuf,
-        innerPayload
-    ])
-    
-    client.write('login_plugin_response', {
-        messageId: packet.messageId,
-        success: true,
-        data: responseData
-    })
-    console.log(`[SENT] ${innerChannel} response (${responseData.length} bytes)`)
-}
-
-// Отправка null-ответа (success=false)
-function sendNullResponse(packet) {
-    client.write('login_plugin_response', {
-        messageId: packet.messageId,
-        success: false
-    })
-    console.log(`[SENT] Null response`)
-}
-
 client.on('login_plugin_request', (packet) => {
-    console.log(`\n[REQUEST #${packet.messageId}] Channel: ${packet.channel}`)
-    
-    // packet.data уже содержит данные после названия канала
-    // Для fml:loginwrapper в packet.data будет: [Длина][ВнутреннийКанал][Данные]
-    
     let innerChannel = ''
     let innerData = Buffer.alloc(0)
-    
+
     if (packet.data && packet.data.length > 0) {
         const nameLen = packet.data[0]
-        if (nameLen < packet.data.length) {
-            innerChannel = packet.data.slice(1, 1 + nameLen).toString('utf8')
-            innerData = packet.data.slice(1 + nameLen)
-            console.log(`[WRAPPER] Inner channel: ${innerChannel}, DataLen: ${innerData.length}`)
-        }
+        innerChannel = packet.data.slice(1, 1 + nameLen).toString('utf8')
+        innerData = packet.data.slice(1 + nameLen)
     }
 
-    // === 1. TACZ HANDSHAKE ===
+    console.log(`\n[REQUEST #${packet.messageId}] Channel: ${innerChannel}`)
+
+    // Из лога прокси:
+    // Весь пакет: 02 00 01 0e [tacz:handshake] 01 01
+    // 02 = packet id (добавляет библиотека)
+    // 00 = messageId (добавляет библиотека)
+    // 01 = success flag (добавляет библиотека если data != null)
+    // 0e [tacz:handshake] = ЧАСТЬ PAYLOAD
+    // 01 01 = остаток payload
+    //
+    // Значит data = [0e][tacz:handshake][01][01]
+    // То есть в data идет: [длина канала][канал][payload]
+
+    function reply(payload) {
+        // data = [channelLen (1 байт)][channel][payload]
+        const channelBuf = Buffer.from(innerChannel, 'utf8')
+        const data = Buffer.concat([
+            Buffer.from([channelBuf.length]),
+            channelBuf,
+            payload
+        ])
+        client.write('login_plugin_response', {
+            messageId: packet.messageId,
+            data: data
+        })
+        console.log(`[SENT] ${innerChannel} -> hex: ${data.toString('hex')}`)
+    }
+
+    function replyNull() {
+        client.write('login_plugin_response', {
+            messageId: packet.messageId,
+            data: null
+        })
+        console.log(`[SENT] null`)
+    }
+
+    // === TACZ ===
+    // Из прокси лога: payload после канала = 01 01
     if (innerChannel === 'tacz:handshake') {
-        // Из логов прокси: 01 01
-        sendWrapperResponse(packet, 'tacz:handshake', Buffer.from([0x01, 0x01]))
-        return
-    }
-    
-    // === 2. TACZTWEAKS HANDSHAKE ===
-    if (innerChannel === 'tacztweaks:handshake') {
-        // Из логов: просто 01 (или 01 01?)
-        sendWrapperResponse(packet, 'tacztweaks:handshake', Buffer.from([0x01]))
+        reply(Buffer.from([0x01, 0x01]))
         return
     }
 
-    // === 3. FML HANDSHAKE ===
+    // === TACZTWEAKS ===
+    // Из прокси лога нет отдельного ответа для tacztweaks, 
+    // но судя по структуре попробуем 01
+    if (innerChannel === 'tacztweaks:handshake') {
+        reply(Buffer.from([0x01]))
+        return
+    }
+
+    // === FML HANDSHAKE ===
     if (innerChannel === 'fml:handshake' && innerData.length > 0) {
         let offset = 0
-        
+
         // Пропускаем длину пакета
         const packetLenInfo = readVarInt(innerData, offset)
         offset += packetLenInfo.length
-        
-        // Читаем тип
+
+        // Тип пакета
         const typeInfo = readVarInt(innerData, offset)
         const type = typeInfo.value
         offset += typeInfo.length
-        
-        console.log(`[FML] Packet Type: ${type}`)
-        
+
+        console.log(`[FML] Type: ${type}`)
+
         if (type === 5) {
-            console.log('[FML] ModList request, generating response...')
-            
-            // Парсим список модов сервера (ID, DisplayName, Version)
+            // ModList
             const modCountInfo = readVarInt(innerData, offset)
             const modCount = modCountInfo.value
             offset += modCountInfo.length
-            
-            const serverMods = []
+
+            console.log(`[FML] Mods: ${modCount}`)
+
+            const mods = []
             for (let i = 0; i < modCount && offset < innerData.length; i++) {
                 const modId = readString(innerData, offset)
                 offset += modId.totalLength
-                const displayName = readString(innerData, offset) // Пропускаем
+                const displayName = readString(innerData, offset)
                 offset += displayName.totalLength
                 const version = readString(innerData, offset)
                 offset += version.totalLength
-                
-                serverMods.push({ id: modId.value, version: version.value })
+                mods.push({ id: modId.value, version: version.value })
             }
-            
-            // Формируем ответ клиента: [Type 5] [Count] [ID][Version]... [0] [0]
-            const parts = [
-                writeVarInt(5),
-                writeVarInt(serverMods.length)
+
+            // Формируем payload ответа
+            // Из лога прокси большой ответ начинается с f218025c...
+            // f2 18 = VarInt (длина?) ... 02 = тип? 5c = count (92)?
+            // Нет, давай разберем:
+            // f218 = VarInt = (0x12 << 7) | (0x72) = ... = 3058? Нет.
+            // f2 = 1111 0010, старший бит 1 -> продолжение
+            // 18 = 0001 1000, старший бит 0 -> конец
+            // value = (0x72) | (0x18 << 7) = 114 | 3072 = 3186? Нет.
+            // f2 & 0x7F = 0x72 = 114
+            // 18 & 0x7F = 0x18 = 24
+            // value = 114 | (24 << 7) = 114 | 3072 = 3186
+            // Это длина остатка пакета (3186 байт)?
+            // После f218: 02 = тип 2? Нет, type должен быть 5...
+            // 02 5c = тип 2, количество 92?
+            // Похоже клиент шлет тип 2 в ответ на тип 5!
+            // А 5c = 92 = количество модов (88 сервера + 4 своих?)
+            //
+            // Итого структура ответного payload:
+            // [VarInt: длина остатка] [VarInt: тип=2] [VarInt: count] [modid][version]...
+
+            const innerParts = [
+                writeVarInt(2),           // тип ответа = 2 (не 5!)
+                writeVarInt(mods.length)
             ]
-            
-            for (const mod of serverMods) {
-                parts.push(writeString(mod.id))
-                parts.push(writeString(mod.version))
+            for (const mod of mods) {
+                innerParts.push(writeString(mod.id))
+                innerParts.push(writeString(mod.version))
             }
-            
-            // Два нуля в конце (пустые списки каналов/реестров)
-            parts.push(writeVarInt(0))
-            parts.push(writeVarInt(0))
-            
-            const payload = Buffer.concat(parts)
-            sendWrapperResponse(packet, 'fml:handshake', payload)
+            const innerBuf = Buffer.concat(innerParts)
+
+            // Оборачиваем в [VarInt: длина][данные]
+            const payload = Buffer.concat([
+                writeVarInt(innerBuf.length),
+                innerBuf
+            ])
+
+            reply(payload)
             return
         }
-        
-        // Для остальных типов FML отправляем "успех" с минимальными данными
-        // Из логов прокси: 01 63 (или просто подтверждение)
-        sendWrapperResponse(packet, 'fml:handshake', Buffer.from([0x63]))
+
+        // Остальные типы FML (регистры и т.д.)
+        // Из лога прокси: Response = 01 63
+        // Значит payload = 63
+        // Но у нас reply() добавит канал, поэтому payload просто:
+        // Стоп. Давай пересмотрим.
+        // Весь пакет (из прокси): 02 04 01 0d [fml:handshake] 01 63
+        // data (что мы передаем): 0d [fml:handshake] 01 63
+        // payload (после канала): 01 63
+        // Значит для остальных типов FML payload = 01 63
+        reply(Buffer.from([0x01, 0x63]))
         return
     }
 
     // Всё остальное
-    sendNullResponse(packet)
+    replyNull()
 })
 
 client.on('login', () => {
-    console.log('\n✅✅✅ УСПЕХ! ЗАШЛИ НА СЕРВЕР! ✅✅✅\n')
+    console.log('\n✅✅✅ УСПЕХ! ✅✅✅')
 })
 
 client.on('disconnect', (packet) => {
-    console.log('\n❌ DISCONNECT:', packet.reason?.toString().substring(0, 300) || 'Unknown')
+    console.log('\n❌ DISCONNECT:', packet.reason?.toString().substring(0, 300))
     process.exit()
 })
 
@@ -182,12 +209,12 @@ client.on('error', (err) => {
     process.exit()
 })
 
-client.on('end', () => { 
+client.on('end', () => {
     console.log('\n🔌 DISCONNECTED')
-    process.exit() 
+    process.exit()
 })
 
-setTimeout(() => { 
+setTimeout(() => {
     console.log('\n⏱️ TIMEOUT')
-    process.exit() 
+    process.exit()
 }, 30000)
