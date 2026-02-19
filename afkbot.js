@@ -225,6 +225,9 @@ function handlePlayPacket(pkt) {
     const id = idInfo.value
     let o = idInfo.length
 
+    // ВРЕМЕННО — логируем все пакеты
+    console.log(`[PLAY PKT] id=0x${id.toString(16)} len=${pkt.length}`)
+
     function sendPlay(packetId, ...parts) {
         const body = Buffer.concat([writeVarInt(packetId), ...parts])
         const inner = Buffer.concat([writeVarInt(0), body])
