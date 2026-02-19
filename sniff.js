@@ -135,6 +135,8 @@ sock.on('data', chunk => {
             return
         }
 
+        console.log(`[PKT] id=0x${idInfo.value.toString(16)} len=${pkt.length} hex=${pkt.slice(0,16).toString('hex')}`)
+        
         // Login Plugin Request = 0x04
         if (idInfo.value === 0x04) {
             let o = idInfo.length
