@@ -435,6 +435,7 @@ function handlePlayPacket(pkt) {
     }
 
 // Player Position
+// Player Position
 if (id === 0x3C || id === 0x38) {
     posX = pkt.readDoubleBE(o); o += 8
     posY = pkt.readDoubleBE(o); o += 8
@@ -451,10 +452,22 @@ if (id === 0x3C || id === 0x38) {
     
     console.log(`[POS] ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)} tid=${teleportIdInfo.value}`)
     
-    // 1. Confirm Teleportation - ИСПРАВЛЕНО!
-    // Отправляем только teleport ID без дополнительных байтов
-    const teleportIdBuf = writeVarInt(teleportIdInfo.value)
-    sendPlayPacket(0x00, teleportIdBuf)
+    // 1. Confirm Teleportation - отправляем вручную
+    // Формат: [packet_id=0x00][teleport_id as VarInt]
+    const confirmBody = Buffer.concat([
+        writeVarInt(0x00),  // packet ID
+        writeVarInt(teleportIdInfo.value)  // teleport ID
+    ])
+    
+    // Оборачиваем в compression если нужно
+    if (compressionThreshold >= 0) {
+        const inner = Buffer.concat([writeVarInt(0), confirmBody])
+        sock.write(Buffer.concat([writeVarInt(inner.length), inner]))
+    } else {
+        sock.write(Buffer.concat([writeVarInt(confirmBody.length), confirmBody]))
+    }
+    
+    console.log('[POS] Sent TeleportConfirm')
     
     // 2. Set Player Position and Rotation
     const posBuf = Buffer.alloc(8 * 3 + 4 * 2 + 1)
@@ -468,7 +481,7 @@ if (id === 0x3C || id === 0x38) {
     
     startPositionUpdates()
     
-    console.log('[POS] Sent TeleportConfirm + SetPlayerPosRot')
+    console.log('[POS] Sent SetPlayerPosRot')
     return
 }
 
