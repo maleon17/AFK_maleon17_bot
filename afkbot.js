@@ -14,7 +14,10 @@ let isRunning = false
 let compressionThreshold = -1
 let health = 20, food = 20
 let posX = 0, posY = 0, posZ = 0
-let onGround = false
+let yaw = 0, pitch = 0
+let onGround = true
+let positionInterval = null
+let chatHistory = []
 
 function log(text) {
     console.log(text)
@@ -29,6 +32,7 @@ function readVarInt(buf, off) {
         b = buf[off + len]
         val |= (b & 0x7F) << (len * 7)
         len++
+        if (len > 5) return null
     } while (b & 0x80)
     return { value: val, length: len }
 }
@@ -47,6 +51,7 @@ function writeVarInt(val) {
 function readString(buf, off) {
     const len = readVarInt(buf, off)
     if (!len) return null
+    if (off + len.length + len.value > buf.length) return null
     return {
         value: buf.slice(off + len.length, off + len.length + len.value).toString('utf8'),
         totalLength: len.length + len.value
@@ -78,6 +83,89 @@ function sendPlayPacket(packetId, ...parts) {
     const body = Buffer.concat([writeVarInt(packetId), ...parts])
     const inner = Buffer.concat([writeVarInt(0), body])
     sock.write(Buffer.concat([writeVarInt(inner.length), inner]))
+}
+
+// ===== Отправка сообщения в чат =====
+function sendChatMessage(msg) {
+    if (!sock || !isRunning) return
+    
+    const msgBuf = Buffer.from(msg, 'utf8')
+    const timestamp = Buffer.alloc(8)
+    timestamp.writeBigInt64BE(BigInt(Date.now()), 0)
+    const salt = Buffer.alloc(8)
+    
+    const body = Buffer.concat([
+        writeVarInt(0x05),           // Chat Message packet id
+        writeVarInt(msgBuf.length), msgBuf,
+        timestamp,
+        salt,
+        writeVarInt(0),              // no signatures
+        writeVarInt(0),              // no message count
+        Buffer.from([0x00, 0x00, 0x00]) // acknowledged (3 bytes BitSet)
+    ])
+    
+    const inner = Buffer.concat([writeVarInt(0), body])
+    sock.write(Buffer.concat([writeVarInt(inner.length), inner]))
+    console.log(`[CHAT] ${msg}`)
+}
+
+// ===== Отправка команды (с /) =====
+function sendCommand(cmd) {
+    if (!sock || !isRunning) return
+    
+    // Убираем "/" если он есть в начале
+    if (cmd.startsWith('/')) cmd = cmd.substring(1)
+    
+    const cmdBuf = Buffer.from(cmd, 'utf8')
+    const timestamp = Buffer.alloc(8)
+    timestamp.writeBigInt64BE(BigInt(Date.now()), 0)
+    const salt = Buffer.alloc(8)
+    
+    const body = Buffer.concat([
+        writeVarInt(0x04),           // Chat Command packet id
+        writeVarInt(cmdBuf.length), cmdBuf,
+        timestamp,
+        salt,
+        writeVarInt(0),              // no signatures
+        writeVarInt(0),
+        Buffer.from([0x00, 0x00, 0x00])
+    ])
+    
+    const inner = Buffer.concat([writeVarInt(0), body])
+    sock.write(Buffer.concat([writeVarInt(inner.length), inner]))
+    console.log(`[CMD] /${cmd}`)
+}
+
+// ===== Периодическая отправка позиции =====
+function startPositionUpdates() {
+    if (positionInterval) clearInterval(positionInterval)
+    
+    positionInterval = setInterval(() => {
+        if (!sock || !isRunning) {
+            stopPositionUpdates()
+            return
+        }
+        
+        // Set Player Position and Rotation (0x15)
+        const posBuf = Buffer.alloc(8 * 3 + 4 * 2 + 1)
+        posBuf.writeDoubleBE(posX, 0)
+        posBuf.writeDoubleBE(posY, 8)
+        posBuf.writeDoubleBE(posZ, 16)
+        posBuf.writeFloatBE(yaw, 24)
+        posBuf.writeFloatBE(pitch, 28)
+        posBuf.writeUInt8(1, 32) // onGround
+        sendPlayPacket(0x15, posBuf)
+    }, 50) // каждые 50ms
+    
+    console.log('[POS] Started position updates (every 50ms)')
+}
+
+function stopPositionUpdates() {
+    if (positionInterval) {
+        clearInterval(positionInterval)
+        positionInterval = null
+        console.log('[POS] Stopped position updates')
+    }
 }
 
 // ===== Handshake =====
@@ -229,21 +317,45 @@ function handlePlayPacket(pkt) {
         return
     }
 
-    // Disconnect (0x1A)
-    if (id === 0x1A) {
+    // Disconnect (0x1A или 0x17)
+    if (id === 0x1A || id === 0x17) {
         const reason = readString(pkt, o)
         log(`❌ Кик: ${reason ? reason.value : 'unknown'}`)
+        log(`Пакет кика (hex): ${pkt.toString('hex')}`)
         sock.destroy()
         return
     }
 
     // System Chat (0x60)
-    if (id === 0x60) {
+    if (id === 0x60 || id === 0x5F) {
         const msg = readString(pkt, o)
         if (msg) {
-            console.log('[CHAT]', msg.value)
-            if (msg.value.includes('verify') || msg.value.includes('код') || msg.value.includes('code') || msg.value.includes('2FA')) {
-                log(`🔐 Нужна верификация!\n\n${msg.value}\n\nОтправь: /code XXXXXX`)
+            const msgText = msg.value
+            console.log('[CHAT]', msgText)
+            
+            // Сохраняем в историю (последние 10 сообщений)
+            chatHistory.push(msgText)
+            if (chatHistory.length > 10) chatHistory.shift()
+            
+            // Проверяем разные варианты сообщений
+            if (msgText.includes('verify') || msgText.includes('код') || 
+                msgText.includes('code') || msgText.includes('2FA') ||
+                msgText.includes('Verify') || msgText.includes('Code')) {
+                log(`🔐 Нужна верификация!\n\n${msgText}\n\nОтправь: /code XXXXXX`)
+            }
+            
+            // Успешная верификация
+            if (msgText.includes('success') || msgText.includes('успешно') || 
+                msgText.includes('Success') || msgText.includes('verified') ||
+                msgText.includes('Verified')) {
+                log(`✅ Верификация успешна!\n\n${msgText}`)
+            }
+            
+            // Ошибка верификации
+            if (msgText.includes('invalid') || msgText.includes('неверный') ||
+                msgText.includes('Invalid') || msgText.includes('wrong') ||
+                msgText.includes('Wrong') || msgText.includes('incorrect')) {
+                log(`❌ Неверный код!\n\n${msgText}\n\nОтправь новый: /code XXXXXX`)
             }
         }
         return
@@ -267,8 +379,8 @@ function handlePlayPacket(pkt) {
         posX = pkt.readDoubleBE(o); o += 8
         posY = pkt.readDoubleBE(o); o += 8
         posZ = pkt.readDoubleBE(o); o += 8
-        const yaw = pkt.readFloatBE(o); o += 4
-        const pitch = pkt.readFloatBE(o); o += 4
+        yaw = pkt.readFloatBE(o); o += 4
+        pitch = pkt.readFloatBE(o); o += 4
         const flags = pkt.readUInt8(o); o += 1
         const teleportIdInfo = readVarInt(pkt, o)
         
@@ -289,8 +401,11 @@ function handlePlayPacket(pkt) {
         posBuf.writeDoubleBE(posZ, 16)
         posBuf.writeFloatBE(yaw, 24)
         posBuf.writeFloatBE(pitch, 28)
-        posBuf.writeUInt8(onGround ? 1 : 0, 32)
+        posBuf.writeUInt8(1, 32) // onGround = true
         sendPlayPacket(0x15, posBuf)
+        
+        // Запускаем периодическую отправку позиции
+        startPositionUpdates()
         
         console.log('[POS] Sent TeleportConfirm + SetPlayerPosRot')
         return
@@ -308,25 +423,17 @@ function handlePlayPacket(pkt) {
         console.log(`[GAME_EVENT] ${event}`)
         return
     }
-}
 
-// ===== Отправка команды =====
-function sendCommand(cmd) {
-    if (!sock || !isRunning) return
-    const cmdBuf = Buffer.from(cmd, 'utf8')
-    const timestamp = Buffer.alloc(8)
-    const salt = Buffer.alloc(8)
-    const body = Buffer.concat([
-        writeVarInt(0x04),
-        writeVarInt(cmdBuf.length), cmdBuf,
-        timestamp, salt,
-        writeVarInt(0),
-        writeVarInt(0),
-        Buffer.alloc(3)
-    ])
-    const inner = Buffer.concat([writeVarInt(0), body])
-    sock.write(Buffer.concat([writeVarInt(inner.length), inner]))
-    console.log(`[CMD] /${cmd}`)
+    // Player Info (0x3A или 0x36) - список игроков
+    if (id === 0x3A || id === 0x36) {
+        console.log('[PLAYER_INFO] received')
+        return
+    }
+
+// Логируем неизвестные пакеты
+    if (![0x78, 0x6b, 0x17, 0x0c, 0x34, 0x4d, 0x6d, 0x1c, 0x3d, 0x5a, 0x45, 0x22, 0x5e, 0x50].includes(id)) {
+        console.log(`[UNKNOWN PKT] id=0x${id.toString(16)} len=${pkt.length}`)
+    }
 }
 
 // ===== Подключение =====
@@ -335,7 +442,9 @@ function connect() {
     gamePhase = 'login'
     compressionThreshold = -1
     isRunning = false
-    onGround = false
+    onGround = true
+    chatHistory = []
+    stopPositionUpdates()
 
     sock = net.createConnection(PORT, HOST, () => {
         console.log('[+] Connected!')
@@ -348,18 +457,21 @@ function connect() {
     sock.on('error', (e) => {
         log(`🔴 Ошибка: ${e.message}`)
         isRunning = false
+        stopPositionUpdates()
     })
 
     sock.on('close', () => {
         log('🔌 Отключён от сервера')
         isRunning = false
         sock = null
+        stopPositionUpdates()
     })
 }
 
 function disconnect() {
     if (sock) { sock.destroy(); sock = null }
     isRunning = false
+    stopPositionUpdates()
 }
 
 function getStatus() {
@@ -385,13 +497,33 @@ tbot.on('/code', (msg) => {
     if (msg.from.id !== ADMIN_ID) return
     const code = msg.text.split(' ')[1]
     if (!code) return msg.reply.text('Использование: /code XXXXXX')
-    sendCommand(`verify ${code.toUpperCase()}`)
-    return msg.reply.text(`✅ Отправлено: /verify ${code.toUpperCase()}`)
+    
+    sendChatMessage(`/verify ${code.toUpperCase()}`)
+    
+    return msg.reply.text(`✅ Отправлено в чат: /verify ${code.toUpperCase()}`)
 })
 
 tbot.on('/status', (msg) => {
     if (msg.from.id !== ADMIN_ID) return
     return msg.reply.text(getStatus())
+})
+
+tbot.on('/chat', (msg) => {
+    if (msg.from.id !== ADMIN_ID) return
+    if (chatHistory.length === 0) {
+        return msg.reply.text('📭 История чата пуста')
+    }
+    const history = chatHistory.map((m, i) => `${i+1}. ${m}`).join('\n\n')
+    return msg.reply.text(`💬 Последние сообщения:\n\n${history}`)
+})
+
+tbot.on('/say', (msg) => {
+    if (msg.from.id !== ADMIN_ID) return
+    const text = msg.text.replace('/say', '').trim()
+    if (!text) return msg.reply.text('Использование: /say <текст>')
+    
+    sendChatMessage(text)
+    return msg.reply.text(`✅ Отправлено: ${text}`)
 })
 
 tbot.on('/eat', (msg) => {
