@@ -309,20 +309,18 @@ function handlePlayPacket(pkt) {
     const id = idInfo.value
     let o = idInfo.length
 
-    // Login (Play) - 0x28 или 0x29 или 0x6b для 1.20.1
-    // ВАЖНО: нужно ответить Client Information
+    // Login (Play)
     if (id === 0x28 || id === 0x29 || id === 0x6b) {
         console.log('[LOGIN PLAY] Received - sending client settings')
         
-        // Client Information (0x08)
         const locale = writeString('ru_ru')
-        const viewDistance = Buffer.from([0x08]) // 8 chunks
-        const chatMode = writeVarInt(0) // enabled
-        const chatColors = Buffer.from([0x01]) // true
-        const skinParts = Buffer.from([0x7F]) // all parts
-        const mainHand = writeVarInt(1) // right
-        const textFiltering = Buffer.from([0x00]) // false
-        const allowServerListings = Buffer.from([0x01]) // true
+        const viewDistance = Buffer.from([0x08])
+        const chatMode = writeVarInt(0)
+        const chatColors = Buffer.from([0x01])
+        const skinParts = Buffer.from([0x7F])
+        const mainHand = writeVarInt(1)
+        const textFiltering = Buffer.from([0x00])
+        const allowServerListings = Buffer.from([0x01])
         
         sendPlayPacket(0x08, Buffer.concat([
             locale,
@@ -338,15 +336,16 @@ function handlePlayPacket(pkt) {
         return
     }
 
-    // Keep Alive (0x23 или 0x4e)
+    // Keep Alive
     if (id === 0x23 || id === 0x4e) {
         const keepAliveId = pkt.slice(o, o + 8)
         sendPlayPacket(0x12, keepAliveId)
+        lastKeepAlive = Date.now()
         console.log('[PLAY] Keep-alive pong')
         return
     }
 
-    // Plugin Message (0x17)
+    // Plugin Message
     if (id === 0x17) {
         const channel = readString(pkt, o)
         if (channel) {
@@ -362,7 +361,7 @@ function handlePlayPacket(pkt) {
         return
     }
 
-    // Disconnect (0x1A)
+    // Disconnect
     if (id === 0x1A) {
         const reason = readString(pkt, o)
         log(`❌ Кик: ${reason ? reason.value : 'unknown'}`)
@@ -370,32 +369,53 @@ function handlePlayPacket(pkt) {
         return
     }
 
-    // System Chat (0x60, 0x64, 0x67)
+    // System Chat - ВАЖНО! Здесь приходит код верификации
     if (id === 0x60 || id === 0x64 || id === 0x5F || id === 0x67) {
         const msg = readString(pkt, o)
         if (msg) {
-            const msgText = msg.value
-            console.log('[CHAT]', msgText)
+            let msgText = msg.value
+            console.log('[CHAT RAW]', msgText)
             
+            // Парсим JSON если это formatted message
+            try {
+                const parsed = JSON.parse(msgText)
+                if (parsed.text) msgText = parsed.text
+                if (parsed.extra && Array.isArray(parsed.extra)) {
+                    msgText = parsed.extra.map(e => e.text || '').join('')
+                }
+            } catch (e) {
+                // Не JSON, оставляем как есть
+            }
+            
+            console.log('[CHAT]', msgText)
             chatHistory.push(msgText)
             if (chatHistory.length > 10) chatHistory.shift()
             
-            if (msgText.includes('verify') || msgText.includes('код') || 
-                msgText.includes('code') || msgText.includes('2FA') ||
-                msgText.includes('Verify') || msgText.includes('Code')) {
-                log(`🔐 Нужна верификация!\n\n${msgText}\n\nОтправь: /code XXXXXX`)
+            // Ищем паттерн "Введите в Minecraft: /verify XXXXXX"
+            const verifyMatch = msgText.match(/\/verify\s+([A-Z0-9]{6})/i)
+            
+            if (verifyMatch) {
+                const code = verifyMatch[1].toUpperCase()
+                log(`🔐 Получен код верификации: ${code}\n\nОтправляю команду...`)
+                
+                setTimeout(() => {
+                    const success = sendCommand(`verify ${code}`)
+                    if (success) {
+                        log(`✅ Команда /verify ${code} отправлена!`)
+                    } else {
+                        log(`❌ Ошибка отправки команды`)
+                    }
+                }, 500)
             }
             
-            if (msgText.includes('success') || msgText.includes('успешно') || 
-                msgText.includes('Success') || msgText.includes('verified') ||
-                msgText.includes('Verified')) {
+            // Проверяем на успешную верификацию
+            if (msgText.includes('Добро пожаловать') || msgText.includes('Welcome')) {
                 log(`✅ Верификация успешна!\n\n${msgText}`)
             }
             
-            if (msgText.includes('invalid') || msgText.includes('неверный') ||
-                msgText.includes('Invalid') || msgText.includes('wrong') ||
-                msgText.includes('Wrong') || msgText.includes('incorrect')) {
-                log(`❌ Неверный код!\n\n${msgText}\n\nОтправь новый: /code XXXXXX`)
+            // Проверяем на ошибку
+            if (msgText.includes('Неверный код') || msgText.includes('Invalid code')) {
+                log(`❌ Неверный код!\n\n${msgText}`)
             }
         }
         return
@@ -414,7 +434,7 @@ function handlePlayPacket(pkt) {
         return
     }
 
-    // Player Position (0x3C)
+    // Player Position
     if (id === 0x3C || id === 0x38) {
         posX = pkt.readDoubleBE(o); o += 8
         posY = pkt.readDoubleBE(o); o += 8
@@ -448,7 +468,7 @@ function handlePlayPacket(pkt) {
         return
     }
 
-    // Set Default Spawn Position
+    // Spawn Position
     if (id === 0x50 || id === 0x4D || id === 0x4C) {
         console.log('[SPAWN] Default spawn position received')
         return
@@ -466,14 +486,6 @@ function handlePlayPacket(pkt) {
         console.log('[PLAYER_INFO] received')
         return
     }
-
-    // Игнорируем частые пакеты без лога
-    if ([0x78, 0x24, 0x21, 0x22, 0x25, 0x0c, 0x34, 0x6d, 0x3d, 0x5a, 0x45, 0x5e].includes(id)) {
-        return
-    }
-
-    // Логируем остальные пакеты
-    console.log(`[PKT] id=0x${id.toString(16)} len=${pkt.length}`)
 }
 
 // ===== Подключение =====
