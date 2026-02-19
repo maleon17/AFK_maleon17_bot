@@ -30,7 +30,7 @@ function buildHandshake() {
     const hostLen = writeVarInt(hostBuf.length)
     const payload = Buffer.concat([
         Buffer.from([0x00]),           // packet id
-        writeVarInt(765),              // protocol version 1.20.1
+        writeVarInt(763),              // protocol version 1.20.1
         hostLen, hostBuf,             // host
         Buffer.from([0x78, 0xce]),    // port 30958
         Buffer.from([0x02])           // next state: login
