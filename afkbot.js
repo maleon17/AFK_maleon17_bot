@@ -369,14 +369,13 @@ function handlePlayPacket(pkt) {
         return
     }
 
-    // System Chat - ВАЖНО! Здесь приходит код верификации
+    // System Chat
     if (id === 0x60 || id === 0x64 || id === 0x5F || id === 0x67) {
         const msg = readString(pkt, o)
         if (msg) {
             let msgText = msg.value
             console.log('[CHAT RAW]', msgText)
             
-            // Парсим JSON если это formatted message
             try {
                 const parsed = JSON.parse(msgText)
                 if (parsed.text) msgText = parsed.text
@@ -384,14 +383,13 @@ function handlePlayPacket(pkt) {
                     msgText = parsed.extra.map(e => e.text || '').join('')
                 }
             } catch (e) {
-                // Не JSON, оставляем как есть
+                // Не JSON
             }
             
             console.log('[CHAT]', msgText)
             chatHistory.push(msgText)
             if (chatHistory.length > 10) chatHistory.shift()
             
-            // Ищем паттерн "Введите в Minecraft: /verify XXXXXX"
             const verifyMatch = msgText.match(/\/verify\s+([A-Z0-9]{6})/i)
             
             if (verifyMatch) {
@@ -408,12 +406,10 @@ function handlePlayPacket(pkt) {
                 }, 500)
             }
             
-            // Проверяем на успешную верификацию
             if (msgText.includes('Добро пожаловать') || msgText.includes('Welcome')) {
                 log(`✅ Верификация успешна!\n\n${msgText}`)
             }
             
-            // Проверяем на ошибку
             if (msgText.includes('Неверный код') || msgText.includes('Invalid code')) {
                 log(`❌ Неверный код!\n\n${msgText}`)
             }
@@ -434,7 +430,7 @@ function handlePlayPacket(pkt) {
         return
     }
 
-    // Player Position - ПОЛНОСТЬЮ ИГНОРИРУЕМ
+    // Player Position - ИГНОРИРУЕМ
     if (id === 0x3C || id === 0x38) {
         posX = pkt.readDoubleBE(o); o += 8
         posY = pkt.readDoubleBE(o); o += 8
@@ -443,11 +439,27 @@ function handlePlayPacket(pkt) {
         pitch = pkt.readFloatBE(o); o += 4
     
         console.log(`[POS] ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)} - IGNORING`)
-    
-        // НЕ ОТПРАВЛЯЕМ ВООБЩЕ НИЧЕГО
-        // Просто сохраняем позицию
         return
     }
+
+    // Spawn Position
+    if (id === 0x50 || id === 0x4D || id === 0x4C) {
+        console.log('[SPAWN] received')
+        return
+    }
+
+    // Game Event
+    if (id === 0x1c || id === 0x1E || id === 0x20) {
+        console.log('[GAME_EVENT] received')
+        return
+    }
+
+    // Player Info
+    if (id === 0x3A || id === 0x36 || id === 0x3B) {
+        console.log('[PLAYER_INFO] received')
+        return
+    }
+}  // <-- ЗАКРЫВАЕМ ФУНКЦИЮ!
 
 // ===== Подключение =====
 function connect() {
