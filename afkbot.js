@@ -272,7 +272,7 @@ function handlePlayPacket(pkt) {
     }
 
     // Player Position (0x3C)
-    if (id === 0x3C) {
+if (id === 0x3C) {
         posX = pkt.readDoubleBE(o); o += 8
         posY = pkt.readDoubleBE(o); o += 8
         posZ = pkt.readDoubleBE(o); o += 8
@@ -280,8 +280,19 @@ function handlePlayPacket(pkt) {
         o += 4  // pitch
         o += 1  // flags
         const teleportId = readVarInt(pkt, o)
-        console.log(`[POS] ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)} tid=${teleportId.value}`)
-        sendPlay(0x00, writeVarInt(teleportId.value))
+        console.log(`[POS] ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)} tid=${teleportId ? teleportId.value : 'NULL'} pktLen=${pkt.length} o=${o}`)
+        
+        if (!teleportId) {
+            console.log('[POS] teleportId is null! pkt hex:', pkt.toString('hex'))
+            return
+        }
+        
+        const tidBuf = writeVarInt(teleportId.value)
+        const body = Buffer.concat([writeVarInt(0x00), tidBuf])
+        const inner = Buffer.concat([writeVarInt(0), body])
+        const full = Buffer.concat([writeVarInt(inner.length), inner])
+        console.log(`[POS] sending TeleportConfirm: ${full.toString('hex')}`)
+        sock.write(full)
         return
     }
 }
