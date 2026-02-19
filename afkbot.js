@@ -235,9 +235,11 @@ function handlePlayPacket(pkt) {
     }
 
     // Keep Alive (0x23)
-    if (id === 0x23) {
+    if (id === 0x23 || id === 0x4e) {
         const keepAliveId = pkt.slice(o, o + 8)
-        sendPlay(0x12, keepAliveId)
+        const body = Buffer.concat([writeVarInt(0x12), keepAliveId])
+        const inner = Buffer.concat([writeVarInt(0), body])
+        sock.write(Buffer.concat([writeVarInt(inner.length), inner]))
         console.log('[PLAY] Keep-alive pong')
         return
     }
