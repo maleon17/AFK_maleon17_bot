@@ -269,17 +269,21 @@ function handlePlayPacket(pkt) {
     }
 
     // Player Position (0x3C)
-    if (id === 0x3C) {
+if (id === 0x3C) {
         posX = pkt.readDoubleBE(o); o += 8
         posY = pkt.readDoubleBE(o); o += 8
         posZ = pkt.readDoubleBE(o); o += 8
-        o += 4 // yaw, pitch floats
+        o += 4 // yaw float
+        o += 4 // pitch float
+        o += 1 // flags byte
         const teleportId = readVarInt(pkt, o)
-        // Подтверждаем телепорт
+        console.log(`[POS] ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)} teleportId=${teleportId.value}`)
+
+        // TeleportConfirm — сжатый пакет: [pktLen][dataLen=0][pktId][teleportId]
         const tidBuf = writeVarInt(teleportId.value)
-        const inner = Buffer.concat([writeVarInt(0), writeVarInt(0x00), tidBuf])
+        const pktBody = Buffer.concat([writeVarInt(0x00), tidBuf])
+        const inner = Buffer.concat([writeVarInt(0), pktBody])
         sock.write(Buffer.concat([writeVarInt(inner.length), inner]))
-        console.log(`[POS] ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)}`)
         return
     }
 }
