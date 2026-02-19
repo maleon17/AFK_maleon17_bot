@@ -276,7 +276,9 @@ function handlePlayPacket(pkt) {
         o += 4 // yaw, pitch floats
         const teleportId = readVarInt(pkt, o)
         // Подтверждаем телепорт
-        sendPacket(0x00, writeVarInt(teleportId.value))
+        const tidBuf = writeVarInt(teleportId.value)
+        const inner = Buffer.concat([writeVarInt(0), writeVarInt(0x00), tidBuf])
+        sock.write(Buffer.concat([writeVarInt(inner.length), inner]))
         console.log(`[POS] ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)}`)
         return
     }
