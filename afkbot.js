@@ -430,36 +430,54 @@ function handlePlayPacket(pkt) {
         return
     }
 
-    // Player Position - ИГНОРИРУЕМ
-    if (id === 0x3C || id === 0x38) {
-        posX = pkt.readDoubleBE(o); o += 8
-        posY = pkt.readDoubleBE(o); o += 8
-        posZ = pkt.readDoubleBE(o); o += 8
-        yaw = pkt.readFloatBE(o); o += 4
-        pitch = pkt.readFloatBE(o); o += 4
+// Player Position
+if (id === 0x3C || id === 0x38) {
+    posX = pkt.readDoubleBE(o); o += 8
+    posY = pkt.readDoubleBE(o); o += 8
+    posZ = pkt.readDoubleBE(o); o += 8
+    yaw = pkt.readFloatBE(o); o += 4
+    pitch = pkt.readFloatBE(o); o += 4
+    const flags = pkt.readUInt8(o); o += 1
+    const teleportIdInfo = readVarInt(pkt, o)
     
-        console.log(`[POS] ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)} - IGNORING`)
+    if (!teleportIdInfo) {
+        console.log('[POS] ERROR: teleportId is null!')
         return
     }
-
-    // Spawn Position
-    if (id === 0x50 || id === 0x4D || id === 0x4C) {
-        console.log('[SPAWN] received')
-        return
-    }
-
-    // Game Event
-    if (id === 0x1c || id === 0x1E || id === 0x20) {
-        console.log('[GAME_EVENT] received')
-        return
-    }
-
-    // Player Info
-    if (id === 0x3A || id === 0x36 || id === 0x3B) {
-        console.log('[PLAYER_INFO] received')
-        return
-    }
-}  // <-- ЗАКРЫВАЕМ ФУНКЦИЮ!
+    
+    console.log(`[POS] ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)} tid=${teleportIdInfo.value}`)
+    
+    // Confirm Teleportation - отправляем НАПРЯМУЮ
+    // Формат: только teleport ID (VarInt), БЕЗ packet ID внутри данных
+    const teleportIdBuf = writeVarInt(teleportIdInfo.value)
+    
+    // Формируем пакет вручную:
+    // [packet_len][data_len=0][packet_id=0x00][teleport_id]
+    const packetBody = Buffer.concat([
+        writeVarInt(0x00),      // packet ID
+        teleportIdBuf           // только teleport ID
+    ])
+    
+    const compressed = Buffer.concat([
+        writeVarInt(0),         // uncompressed length = 0
+        packetBody
+    ])
+    
+    const finalPacket = Buffer.concat([
+        writeVarInt(compressed.length),
+        compressed
+    ])
+    
+    console.log(`[POS] Sending TeleportConfirm: pktId=0x00 teleportId=${teleportIdInfo.value}`)
+    console.log(`[POS] Packet hex: ${finalPacket.toString('hex')}`)
+    
+    sock.write(finalPacket)
+    
+    // НЕ отправляем позицию и НЕ запускаем updates
+    // Просто подтверждаем телепорт
+    
+    return
+}
 
 // ===== Подключение =====
 function connect() {
