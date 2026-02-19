@@ -227,6 +227,11 @@ function handlePlayPacket(pkt) {
 
     // ВРЕМЕННО — логируем все пакеты
     console.log(`[PLAY PKT] id=0x${id.toString(16)} len=${pkt.length}`)
+    
+    // Логируем подозрительные короткие пакеты полностью
+    if (pkt.length < 20 && id !== 0x78) {
+        console.log(`  hex: ${pkt.toString('hex')}`)
+    }
 
     function sendPlay(packetId, ...parts) {
         const body = Buffer.concat([writeVarInt(packetId), ...parts])
