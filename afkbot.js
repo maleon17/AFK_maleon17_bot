@@ -183,4 +183,222 @@ function handleLoginPacket(pkt) {
         if (msgId.value === 0) {
             const resp = Buffer.concat([
                 writeVarInt(0x02),
-                
+                writeVarInt(msgId.value),
+                Buffer.from([0x01]),
+                Buffer.from('0e7461637a3a68616e647368616b650101', 'hex')
+            ])
+            sock.write(Buffer.concat([writeVarInt(resp.length), resp]))
+        } else if (msgId.value === 1 || msgId.value === 2) {
+            // skip
+        } else if (msgId.value === 3) {
+            const modListHex = 'fa18025d0673617475726e116578706c6f73696f6e6f7665726861756c086765636b6f6c6962097461637a6164646f6e0c636f6e6e656374697669747909696e73616e656c69620d786165726f776f726c646d6170096d6f6465726e6669780d73757065726277617266617265066d656c6f64790c636c6f74685f636f6e666967086b6f6e6b7265746509656d6265646469756d08727562696469756d06636f727073650e6461666661735f617273656e616c046d6373700e6661726d65727364656c696768740977726264726f6e6573076373676f626f780a6c696768747370656564066f63756c757310786165726f6d696e696d617066616972196c6567656e64617279737572766976616c6f7665726861756c06637572696f730a637573746f6d6e70637309776f726c64656469740c6172636869746563747572650e6169696d70726f76656d656e747308637570626f6172640a7472616e736974696f6e0a6974656d7068797369630a656e68616e636564616913646f6f6d736461795f6465636f726174696f6e0c706c61796572726576697665086d61787374756666046b697769057268696e6f066b7562656a7308666173746c6f6164066a73636f6e660c7061727469636c657261696e047461637a0e776172626f726e72656e657765640a7461637a747765616b73077472656e6465720a61736876656869636c650f7061737361626c65666f6c69616765116c696768746d616e7363757272656e6379076261646d6f627309626c75657072696e74037676700d6d656d6f72796c65616b66697805666f7267650e636170747572656f667a6f6e6573096d696e6563726166740674616b6b69740b726174696f6e63726166741e636170735f6177696d5f746163746963616c5f676561725f7265776f726b0a776f6f6c5f62616e647311766f69646c6573736672616d65776f726b0f64697374616e74686f72697a6f6e7309766f696365636861740d766f696365636861745f6170690c6d6978696e737175617265640c6372656174697665636f726511737572766976616c5f696e7374696e63740c77616c6b696574616c6b69650b706572736f6e616c6974790a6c72746163746963616c0e6b6f746c696e666f72666f72676508666c79776865656c06706f6e646572066372656174650a6372656174656465636f0c6672616d6564626c6f636b730a6c657869636f6e6669670b656e646c657373616d6d6f0f736f6c646965727364656c6967687407706172636f6f6c0f6368616d6265725f636c61726974790e7375707072657373696f6e6d6f640d656e7469747963756c6c696e670d6672616374757265706f696e74137461637a7867756e6c69676874736164646f6e0966616e63796d656e750f696d6d6564696174656c79666173740b66657272697465636f7265197965745f616e6f746865725f636f6e6669675f6c69625f76330f656d6265646469756d5f65787472610762617269746f650b73696d706c65726164696f0a636c69636b327069636b4c0d776f726c64656469743a63756901310b706f6e6465723a6d61696e013110766f696365636861743a73656372657419414c4c4f5756414e494c4c4120f09f9293f09f9293f09f92931864697374616e745f686f72697a6f6e733a6d65737361676501310f706172636f6f6c3a6d65737361676507332e342e332e3019696e73616e656c69623a6e6574776f726b5f6368616e6e656c013216766f696365636861743a6372656174655f67726f757019414c4c4f5756414e494c4c4120f09f9293f09f9293f09f9293146d696e6563726166743a756e726567697374657204464d4c3311786165726f6d696e696d61703a6d61696e03312e3010766f696365636861743a73746174657319414c4c4f5756414e494c4c4120f09f9293f09f9293f09f92931b7461637a7867756e6c69676874736164646f6e3a6e6574776f726b03312e3013776172626f726e72656e657765643a6d61696e01310e7461637a3a68616e647368616b6505312e302e3416766f696365636861743a7570646174655f737461746519414c4c4f5756414e494c4c4120f09f9293f09f9293f09f9293137461637a6164646f6e3a73796e635f6461746103312e3023766f69646c6573736672616d65776f726b3a766f69646c6573736672616d65776f726b013113766f696365636861743a6164645f67726f757019414c4c4f5756414e494c4c4120f09f9293f09f9293f09f92930f6974656d7068797369633a6d61696e013112666f7267653a746965725f736f7274696e6703312e3023737572766976616c5f696e7374696e63743a737572766976616c5f696e7374696e637401311373696d706c65726164696f3a6368616e6e656c013011706c617965727265766976653a6d61696e013108666d6c3a706c617904464d4c33116372656174697665636f72653a6d61696e0131126c72746163746963616c3a6e6574776f726b05302e332e300f766f696365636861743a737461746519414c4c4f5756414e494c4c4120f09f9293f09f9293f09f929319766f696365636861743a72656d6f76655f63617465676f727919414c4c4f5756414e494c4c4120f09f9293f09f9293f09f9293196d6f6465726e6669783a696e6772656469656e745f73796e6301310f61736876656869636c653a6d61696e03312e3016766f696365636861743a6164645f63617465676f727919414c4c4f5756414e494c4c4120f09f9293f09f9293f09f929312776f726c64656469743a696e7465726e616c0131077676703a76767001310d626c75657072696e743a6e65740342503112786165726f776f726c646d61703a6d61696e03312e3016766f696365636861743a72656d6f76655f737461746519414c4c4f5756414e494c4c4120f09f9293f09f9293f09f9293166578706c6f73696f6e6f7665726861756c3a6d61696e0131126d696e6563726166743a726567697374657204464d4c331f736f6c646965727364656c696768743a736f6c646965727364656c6967687401310b6372656174653a6d61696e01331b737570657262776172666172653a7375706572627761726661726501310d6765636b6f6c69623a6d61696e01310e77726264726f6e65733a6d61696e0131147461637a747765616b733a68616e647368616b6504322e3133096b6977693a6d61696e01310e636f727073653a64656661756c7405312e302e30146172636869746563747572653a6e6574776f726b013115766f696365636861743a6c656176655f67726f757019414c4c4f5756414e494c4c4120f09f9293f09f9293f09f9293096d6373703a6d61696e013115776f6f6c5f62616e64733a776f6f6c5f62616e64730131126672616374757265706f696e743a6d61696e01310f706572736f6e616c6974793a6e6574013113636170747572656f667a6f6e65733a6d61696e0131137375707072657373696f6e6d6f643a6d61696e013113766f696365636861743a7365745f67726f757019414c4c4f5756414e494c4c4120f09f9293f09f9293f09f92930e66616e63796d656e753a706c6179013116766f696365636861743a6a6f696e65645f67726f757019414c4c4f5756414e494c4c4120f09f9293f09f9293f09f92930e6d6f6465726e6669783a6d61696e01310b637572696f733a6d61696e0131117061727469636c657261696e3a6d61696e0131196c696768746d616e7363757272656e63793a6e6574776f726b01311e6c6567656e64617279737572766976616c6f7665726861756c3a6d61696e0131127461637a747765616b733a6368616e6e656c04322e31330f636c69636b327069636b3a6d61696e013110666d6c3a6c6f67696e7772617070657204464d4c33116672616d6564626c6f636b733a6d61696e013327646f6f6d736461795f6465636f726174696f6e3a646f6f6d736461795f6465636f726174696f6e01310d74616b6b69743a74616b6b6974013117726174696f6e63726166743a726174696f6e6372616674013112637573746f6d6e7063733a7061636b65747305434e50435318766f696365636861743a726571756573745f73656372657419414c4c4f5756414e494c4c4120f09f9293f09f9293f09f92933d636170735f6177696d5f746163746963616c5f676561725f7265776f726b3a636170735f6177696d5f746163746963616c5f676561725f7265776f726b01310d666d6c3a68616e647368616b6504464d4c330f6373676f626f783a6e6574776f726b03312e3016766f696365636861743a72656d6f76655f67726f757019414c4c4f5756414e494c4c4120f09f9293f09f9293f09f92930b666f7267653a73706c697403312e310c7461637a3a6e6574776f726b05312e302e3400'
+            const modList = Buffer.from(modListHex, 'hex')
+            const resp = Buffer.concat([
+                writeVarInt(0x02),
+                writeVarInt(msgId.value),
+                Buffer.from([0x01]),
+                Buffer.from('0d666d6c3a68616e647368616b65', 'hex'),
+                modList
+            ])
+            sock.write(Buffer.concat([writeVarInt(resp.length), resp]))
+        } else {
+            const resp = Buffer.concat([
+                writeVarInt(0x02),
+                writeVarInt(msgId.value),
+                Buffer.from([0x01]),
+                Buffer.from('0d666d6c3a68616e647368616b65', 'hex'),
+                Buffer.from([0x01, 0x63])
+            ])
+            sock.write(Buffer.concat([writeVarInt(resp.length), resp]))
+        }
+    }
+}
+
+// ===== PLAY PHASE =====
+function handlePlayPacket(pkt) {
+    const idInfo = readVarInt(pkt, 0)
+    if (!idInfo) return
+    const id = idInfo.value
+    let o = idInfo.length
+
+    // Keep Alive (0x23 или 0x4e)
+    if (id === 0x23 || id === 0x4e) {
+        const keepAliveId = pkt.slice(o, o + 8)
+        sendPlayPacket(0x12, keepAliveId)
+        console.log('[PLAY] Keep-alive pong')
+        return
+    }
+
+    // Disconnect (0x1A)
+    if (id === 0x1A) {
+        const reason = readString(pkt, o)
+        log(`❌ Кик: ${reason ? reason.value : 'unknown'}`)
+        sock.destroy()
+        return
+    }
+
+    // System Chat (0x60)
+    if (id === 0x60) {
+        const msg = readString(pkt, o)
+        if (msg) {
+            console.log('[CHAT]', msg.value)
+            if (msg.value.includes('verify') || msg.value.includes('код') || msg.value.includes('code') || msg.value.includes('2FA')) {
+                log(`🔐 Нужна верификация!\n\n${msg.value}\n\nОтправь: /code XXXXXX`)
+            }
+        }
+        return
+    }
+
+    // Health Update (0x1F или 0x49)
+    if (id === 0x1F || id === 0x49) {
+        health = pkt.readFloatBE(o); o += 4
+        const foodInfo = readVarInt(pkt, o); 
+        if (foodInfo) food = foodInfo.value
+        console.log(`[HEALTH] HP:${health} Food:${food}`)
+        if (health <= 0) {
+            log('💀 Бот умер! Респаун...')
+            sendPlayPacket(0x09, writeVarInt(0))
+        }
+        return
+    }
+
+    // Player Position (0x3C или 0x38)
+    if (id === 0x3C || id === 0x38) {
+        posX = pkt.readDoubleBE(o); o += 8
+        posY = pkt.readDoubleBE(o); o += 8
+        posZ = pkt.readDoubleBE(o); o += 8
+        const yaw = pkt.readFloatBE(o); o += 4
+        const pitch = pkt.readFloatBE(o); o += 4
+        const flags = pkt.readUInt8(o); o += 1
+        const teleportIdInfo = readVarInt(pkt, o)
+        
+        if (!teleportIdInfo) {
+            console.log('[POS] ERROR: teleportId is null!')
+            return
+        }
+        
+        console.log(`[POS] ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)} tid=${teleportIdInfo.value}`)
+        
+        // 1. Confirm Teleportation (0x00)
+        sendPlayPacket(0x00, writeVarInt(teleportIdInfo.value))
+        
+        // 2. Set Player Position and Rotation (0x15)
+        const posBuf = Buffer.alloc(8 * 3 + 4 * 2 + 1)
+        posBuf.writeDoubleBE(posX, 0)
+        posBuf.writeDoubleBE(posY, 8)
+        posBuf.writeDoubleBE(posZ, 16)
+        posBuf.writeFloatBE(yaw, 24)
+        posBuf.writeFloatBE(pitch, 28)
+        posBuf.writeUInt8(onGround ? 1 : 0, 32)
+        sendPlayPacket(0x15, posBuf)
+        
+        console.log('[POS] Sent TeleportConfirm + SetPlayerPosRot')
+        return
+    }
+
+    // Set Default Spawn Position (0x50 или 0x4D)
+    if (id === 0x50 || id === 0x4D) {
+        console.log('[SPAWN] Default spawn position received')
+        return
+    }
+
+    // Game Event (0x1c)
+    if (id === 0x1c) {
+        const event = pkt.readUInt8(o)
+        console.log(`[GAME_EVENT] ${event}`)
+        return
+    }
+}
+
+// ===== Отправка команды =====
+function sendCommand(cmd) {
+    if (!sock || !isRunning) return
+    const cmdBuf = Buffer.from(cmd, 'utf8')
+    const timestamp = Buffer.alloc(8)
+    const salt = Buffer.alloc(8)
+    const body = Buffer.concat([
+        writeVarInt(0x04),
+        writeVarInt(cmdBuf.length), cmdBuf,
+        timestamp, salt,
+        writeVarInt(0),
+        writeVarInt(0),
+        Buffer.alloc(3)
+    ])
+    const inner = Buffer.concat([writeVarInt(0), body])
+    sock.write(Buffer.concat([writeVarInt(inner.length), inner]))
+    console.log(`[CMD] /${cmd}`)
+}
+
+// ===== Подключение =====
+function connect() {
+    recvBuf = Buffer.alloc(0)
+    gamePhase = 'login'
+    compressionThreshold = -1
+    isRunning = false
+    onGround = false
+
+    sock = net.createConnection(PORT, HOST, () => {
+        console.log('[+] Connected!')
+        sock.write(buildHandshake())
+        sock.write(buildLoginStart())
+    })
+
+    sock.on('data', onData)
+
+    sock.on('error', (e) => {
+        log(`🔴 Ошибка: ${e.message}`)
+        isRunning = false
+    })
+
+    sock.on('close', () => {
+        log('🔌 Отключён от сервера')
+        isRunning = false
+        sock = null
+    })
+}
+
+function disconnect() {
+    if (sock) { sock.destroy(); sock = null }
+    isRunning = false
+}
+
+function getStatus() {
+    if (!isRunning) return '🔴 Оффлайн'
+    return `🟢 Онлайн\n❤️ HP: ${health}/20\n🍖 Голод: ${food}/20\n📍 X:${Math.round(posX)} Y:${Math.round(posY)} Z:${Math.round(posZ)}`
+}
+
+// ===== Telegram =====
+tbot.on('/join', (msg) => {
+    if (msg.from.id !== ADMIN_ID) return
+    if (isRunning) return msg.reply.text('Бот уже на сервере')
+    connect()
+    return msg.reply.text('⏳ Подключаюсь...')
+})
+
+tbot.on('/leave', (msg) => {
+    if (msg.from.id !== ADMIN_ID) return
+    disconnect()
+    return msg.reply.text('👋 Отключён')
+})
+
+tbot.on('/code', (msg) => {
+    if (msg.from.id !== ADMIN_ID) return
+    const code = msg.text.split(' ')[1]
+    if (!code) return msg.reply.text('Использование: /code XXXXXX')
+    sendCommand(`verify ${code.toUpperCase()}`)
+    return msg.reply.text(`✅ Отправлено: /verify ${code.toUpperCase()}`)
+})
+
+tbot.on('/status', (msg) => {
+    if (msg.from.id !== ADMIN_ID) return
+    return msg.reply.text(getStatus())
+})
+
+tbot.on('/eat', (msg) => {
+    if (msg.from.id !== ADMIN_ID) return
+    sendPlayPacket(0x2F, writeVarInt(0))
+    return msg.reply.text('🍖 Пытаюсь есть')
+})
+
+log('🤖 Бот запущен. /join чтобы зайти на сервер.')
+tbot.start()
