@@ -17,9 +17,28 @@ const MOD_LIST_RESPONSE = Buffer.from(
 let fmlCount = 0
 
 client.on('login_plugin_request', (packet) => {
-    console.log(`[#${packet.messageId}] channel field: "${packet.channel}"`)
-    console.log(`  data hex: ${packet.data ? packet.data.toString('hex') : 'null'}`)
-    console.log(`  data length: ${packet.data ? packet.data.length : 0}`)
+    // Читаем внутренний канал из data
+    const nameLen = packet.data[0]
+    const innerChannel = packet.data.slice(1, 1 + nameLen).toString('utf8')
+    
+    console.log(`[#${packet.messageId}] ${innerChannel}`)
+
+    if (innerChannel === 'tacz:handshake') {
+        client.write('login_plugin_response', {
+            messageId: packet.messageId,
+            data: Buffer.from([0x01, 0x01])
+        })
+        return
+    }
+
+    if (innerChannel === 'tacztweaks:handshake') {
+        // Попробуем ответить null/false вместо молчания
+        client.write('login_plugin_response', {
+            messageId: packet.messageId,
+            data: null
+        })
+        return
+    }
 })
 
 client.on('login', () => {
