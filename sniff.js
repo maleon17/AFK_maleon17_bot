@@ -9,125 +9,118 @@ const client = mc.createClient({
     fakeHost: 'donator2.gamely.pro\0FML3\0'
 })
 
-function writeVarInt(value) {
-    const bytes = []
-    do {
-        let b = value & 0x7F
-        value >>>= 7
-        if (value !== 0) b |= 0x80
-        bytes.push(b)
-    } while (value !== 0)
-    return Buffer.from(bytes)
-}
+// Большой payload от реального клиента (ответ на ModList, 3196 байт)
+const MOD_LIST_RESPONSE = Buffer.from(
+    'fa18025d0673617475726e116578706c6f73696f6e6f7665726861756c086765636b6f6c6962097461637a6164646f6e0c636f6e6e656374697669747909696e73616e656c69620d786165726f776f726c646d6170096d6f6465726e6669780d73757065726277617266617265066d656c6f64790c636c6f74685f636f6e666967086b6f6e6b7265746509656d6265646469756d08727562696469756d06636f727073650e6461666661735f617273656e616c046d6373700e6661726d65727364656c696768740977726264726f6e6573076373676f626f780a6c696768747370656564066f63756c757310786165726f6d696e696d617066616972196c6567656e64617279737572766976616c6f7665726861756c06637572696f730a637573746f6d6e70637309776f726c64656469740c6172636869746563747572790e6169696d70726f76656d656e747308637570626f6172640a7472616e736974696f6e0a6974656d7068797369630a656e68616e636564616913646f6f6d736461795f6465636f726174696f6e0c706c61796572726576697665086d61787374756666046b697769057268696e6f066b7562656a7308666173746c6f6164066a73636f6e660c7061727469636c657261696e047461637a0e776172626f726e72656e657765640a7461637a747765616b73077472656e6465720a61736876656869636c650f7061737361626c65666f6c69616765116c696768746d616e7363757272656e6379076261646d6f627309626c75657072696e74037676700d6d656d6f72796c65616b66697805666f7267650e636170747572656f667a6f6e6573096d696e6563726166740674616b6b69740b726174696f6e63726166741e636170735f6177696d5f746163746963616c5f676561725f7265776f726b0a776f6f6c5f62616e647311766f69646c6573736672616d65776f726b0f64697374616e74686f72697a6f6e7309766f696365636861740d766f696365636861745f6170690c6d6978696e737175617265640c6372656174697665636f726511737572766976616c5f696e7374696e63740c77616c6b696574616c6b69650b706572736f6e616c6974790a6c72746163746963616c0e6b6f746c696e666f72666f72676508666c79776865656c06706f6e646572066372656174650a6372656174656465636f0c6672616d6564626c6f636b730a6c657869636f6e6669670b656e646c657373616d6d6f0f736f6c646965727364656c6967687407706172636f6f6c0f6368616d6265725f636c61726974790e7375707072657373696f6e6d6f640d656e7469747963756c6c696e670d6672616374757265706f696e74137461637a7867756e6c69676874736164646f6e0966616e63796d656e750f696d6d6564696174656c79666173740b66657272697465636f7265197965745f616e6f746865725f636f6e6669675f6c69625f76330f656d6265646469756d5f65787472610762617269746f650b73696d706c65726164696f0a636c69636b327069636b4c0d776f726c64656469743a63756901310b706f6e6465723a6d61696e013110766f696365636861743a73656372657419414c4c4f5756414e494c4c4120f09f9293f09f9293f09f92931864697374616e745f686f72697a6f6e733a6d65737361676501310f706172636f6f6c3a6d65737361676507332e342e332e3019696e73616e656c69623a6e6574776f726b5f6368616e6e656c013216766f696365636861743a6372656174655f67726f757019414c4c4f5756414e494c4c4120f09f9293f09f9293f09f9293146d696e6563726166743a756e726567697374657204464d4c3311786165726f6d696e696d61703a6d61696e03312e3010766f696365636861743a73746174657319414c4c4f5756414e494c4c4120f09f9293f09f9293f09f92931b7461637a7867756e6c69676874736164646f6e3a6e6574776f726b03312e3013776172626f726e72656e657765643a6d61696e01310e7461637a3a68616e647368616b6505312e302e3416766f696365636861743a7570646174655f737461746519414c4c4f5756414e494c4c4120f09f9293f09f9293f09f9293137461637a6164646f6e3a73796e635f6461746103312e3023766f69646c6573736672616d65776f726b3a766f69646c6573736672616d65776f726b013113766f696365636861743a6164645f67726f757019414c4c4f5756414e494c4c4120f09f9293f09f9293f09f92930f6974656d7068797369633a6d61696e013112666f7267653a746965725f736f7274696e6703312e3023737572766976616c5f696e7374696e63743a737572766976616c5f696e7374696e637401311373696d706c65726164696f3a6368616e6e656c013011706c617965727265766976653a6d61696e013108666d6c3a706c617904464d4c33116372656174697665636f72653a6d61696e0131126c72746163746963616c3a6e6574776f726b05302e332e300f766f696365636861743a737461746519414c4c4f5756414e494c4c4120f09f9293f09f9293f09f929319766f696365636861743a72656d6f76655f63617465676f727919414c4c4f5756414e494c4c4120f09f9293f09f9293f09f9293196d6f6465726e6669783a696e6772656469656e745f73796e6301310f61736876656869636c653a6d61696e03312e3016766f696365636861743a6164645f63617465676f727919414c4c4f5756414e494c4c4120f09f9293f09f9293f09f929312776f726c64656469743a696e7465726e616c0131077676703a767670013112786165726f776f726c646d61703a6d61696e03312e300d626c75657072696e743a6e65740342503116766f696365636861743a72656d6f76655f737461746519414c4c4f5756414e494c4c4120f09f9293f09f9293f09f9293166578706c6f73696f6e6f7665726861756c3a6d61696e0131126d696e6563726166743a726567697374657204464d4c331f736f6c646965727364656c696768743a736f6c646965727364656c6967687401310b6372656174653a6d61696e01331b737570657262776172666172653a7375706572627761726661726501310d6765636b6f6c69623a6d61696e01310e77726264726f6e65733a6d61696e0131147461637a747765616b733a68616e647368616b6504322e3133096b6977693a6d61696e01310e636f727073653a64656661756c7405312e302e30146172636869746563747572793a6e6574776f726b013115766f696365636861743a6c656176655f67726f757019414c4c4f5756414e494c4c4120f09f9293f09f9293f09f9293096d6373703a6d61696e013115776f6f6c5f62616e64733a776f6f6c5f62616e64730131126672616374757265706f696e743a6d61696e01310f706572736f6e616c6974793a6e6574013113636170747572656f667a6f6e65733a6d61696e0131137375707072657373696f6e6d6f643a6d61696e013113766f696365636861743a7365745f67726f757019414c4c4f5756414e494c4c4120f09f9293f09f9293f09f92930e66616e63796d656e753a706c6179013116766f696365636861743a6a6f696e65645f67726f757019414c4c4f5756414e494c4c4120f09f9293f09f9293f09f92930e6d6f6465726e6669783a6d61696e01310b637572696f733a6d61696e0131117061727469636c657261696e3a6d61696e0131196c696768746d616e7363757272656e63793a6e6574776f726b01311e6c6567656e64617279737572766976616c6f7665726861756c3a6d61696e0131127461637a747765616b733a6368616e6e656c04322e31330f636c69636b327069636b3a6d61696e013110666d6c3a6c6f67696e7772617070657204464d4c33116672616d6564626c6f636b733a6d61696e013327646f6f6d736461795f6465636f726174696f6e3a646f6f6d736461795f6465636f726174696f6e01310d74616b6b69743a74616b6b6974013117726174696f6e63726166743a726174696f6e6372616674013112637573746f6d6e7063733a7061636b65747305434e50435318766f696365636861743a726571756573745f73656372657419414c4c4f5756414e494c4c4120f09f9293f09f9293f09f92933d636170735f6177696d5f746163746963616c5f676561725f7265776f726b3a636170735f6177696d5f746163746963616c5f676561725f7265776f726b01310d666d6c3a68616e647368616b6504464d4c330f6373676f626f783a6e6574776f726b03312e3016766f696365636861743a72656d6f76655f67726f757019414c4c4f5756414e494c4c4120f09f9293f09f9293f09f92930b666f7267653a73706c697403312e310c7461637a3a6e6574776f726b05312e302e3400',
+    'hex'
+)
 
-function writeString(str) {
-    const buf = Buffer.from(str, 'utf8')
-    return Buffer.concat([writeVarInt(buf.length), buf])
-}
+// ACK payload для регистров
+const ACK_PAYLOAD = Buffer.from([0x01, 0x63])
 
-function readVarInt(buffer, offset) {
-    let value = 0, length = 0, currentByte
-    do {
-        if (offset + length >= buffer.length) return { value: 0, length: 0 }
-        currentByte = buffer[offset + length]
-        value |= (currentByte & 0x7F) << (length * 7)
-        length++
-    } while ((currentByte & 0x80) !== 0 && length < 5)
-    return { value, length }
-}
-
-function readString(buffer, offset) {
-    const lenInfo = readVarInt(buffer, offset)
-    const str = buffer.slice(offset + lenInfo.length, offset + lenInfo.length + lenInfo.value).toString('utf8')
-    return { value: str, totalLength: lenInfo.length + lenInfo.value }
-}
+let fmlRequestCount = 0
+let firstFmlMsgId = null
 
 client.on('login_plugin_request', (packet) => {
-    // 1. Читаем внешний канал
-    const channelInfo = readString(packet.data, 0)
-    const isWrapper = channelInfo.value === 'fml:loginwrapper'
-    let innerChannel = channelInfo.value
-    let innerData = packet.data.slice(channelInfo.totalLength)
+    let innerChannel = ''
+    let innerData = Buffer.alloc(0)
 
-    // 2. Если обертка, ныряем глубже
-    if (isWrapper) {
-        const wrapLenInfo = readVarInt(innerData, 0)
-        const wrappedData = innerData.slice(wrapLenInfo.length, wrapLenInfo.length + wrapLenInfo.value)
-        const innerChannelInfo = readString(wrappedData, 0)
-        innerChannel = innerChannelInfo.value
-        innerData = wrappedData.slice(innerChannelInfo.totalLength)
+    if (packet.data && packet.data.length > 0) {
+        const nameLen = packet.data[0]
+        innerChannel = packet.data.slice(1, 1 + nameLen).toString('utf8')
+        innerData = packet.data.slice(1 + nameLen)
     }
 
-    console.log(`[REQUEST] Channel: ${innerChannel} (Wrapped: ${isWrapper})`)
+    console.log(`[#${packet.messageId}] ${innerChannel}`)
 
-    // Функция для сборки ответа
-    function sendReply(payload) {
-        // Собираем внутренний пакет: [String channel][Payload]
-        const innerPacket = Buffer.concat([
-            writeString(innerChannel),
-            payload
-        ])
-
-        // Если была обертка, упаковываем обратно в fml:loginwrapper
-        let finalData
-        if (isWrapper) {
-            finalData = Buffer.concat([
-                writeString('fml:loginwrapper'),
-                writeVarInt(innerPacket.length),
-                innerPacket
-            ])
-        } else {
-            finalData = innerPacket
-        }
-
+    // === TACZ: ответ 01 01 ===
+    if (innerChannel === 'tacz:handshake') {
+        console.log('  -> tacz reply: 0101')
         client.write('login_plugin_response', {
             messageId: packet.messageId,
-            data: finalData
+            data: Buffer.from([0x01, 0x01])
         })
+        return
     }
 
-    // --- ЛОГИКА ОТВЕТОВ (на основе логов друга) ---
-
-    if (innerChannel === 'tacz:handshake') {
-        sendReply(Buffer.from([0x01, 0x01])) 
-    } 
-    else if (innerChannel === 'tacztweaks:handshake') {
-        sendReply(Buffer.from([0x01]))
+    // === TACZTWEAKS: НЕ ОТВЕЧАЕМ (null) ===
+    if (innerChannel === 'tacztweaks:handshake') {
+        console.log('  -> tacztweaks: NO REPLY (null)')
+        client.write('login_plugin_response', {
+            messageId: packet.messageId,
+            data: null
+        })
+        return
     }
-    else if (innerChannel === 'fml:handshake') {
-        const typeInfo = readVarInt(innerData, 0)
-        if (typeInfo.value === 5) {
-            // Разбираем список сервера
-            let offset = typeInfo.length
-            const modCountInfo = readVarInt(innerData, offset)
-            offset += modCountInfo.length
 
-            const mods = []
-            for (let i = 0; i < modCountInfo.value; i++) {
-                const id = readString(innerData, offset); offset += id.totalLength
-                const disp = readString(innerData, offset); offset += disp.totalLength
-                const ver = readString(innerData, offset); offset += ver.totalLength
-                mods.push({ id: id.value, ver: ver.value })
-            }
+    // === FML HANDSHAKE ===
+    if (innerChannel === 'fml:handshake') {
+        fmlRequestCount++
+        console.log(`  -> fml #${fmlRequestCount}`)
 
-            // Формируем ответ: тип 2, список [id][ver] и 00 в конце
-            const parts = [writeVarInt(2), writeVarInt(mods.length)]
-            for (const m of mods) {
-                parts.push(writeString(m.id), writeString(m.ver))
-            }
-            parts.push(Buffer.from([0x00]))
-            
-            console.log(`[FML] Sending mod list reply (Type 2, Mods: ${mods.length})`)
-            sendReply(Buffer.concat(parts))
-        } else {
-            // На все остальные типы (4, 6, 7... 44) клиент отвечает 01 63
-            sendReply(Buffer.from([0x01, 0x63]))
+        // Первый FML запрос (#2 в логе прокси) — НЕ ОТВЕЧАЕМ
+        if (fmlRequestCount === 1) {
+            firstFmlMsgId = packet.messageId
+            console.log('    -> skip (no reply)')
+            client.write('login_plugin_response', {
+                messageId: packet.messageId,
+                data: null
+            })
+            return
         }
-    } else {
-        client.write('login_plugin_response', { messageId: packet.messageId, data: null })
+
+        // Второй FML запрос (#3 в логе прокси) — большой ModList ответ
+        if (fmlRequestCount === 2) {
+            console.log(`    -> ModList response (${MOD_LIST_RESPONSE.length} bytes)`)
+            client.write('login_plugin_response', {
+                messageId: packet.messageId,
+                data: MOD_LIST_RESPONSE
+            })
+            return
+        }
+
+        // Все остальные FML запросы (#4-44) — ack 01 63
+        console.log('    -> ack 0163')
+        client.write('login_plugin_response', {
+            messageId: packet.messageId,
+            data: ACK_PAYLOAD
+        })
+        return
     }
+
+    // === ВСЁ ОСТАЛЬНОЕ ===
+    console.log('  -> unknown, null')
+    client.write('login_plugin_response', {
+        messageId: packet.messageId,
+        data: null
+    })
 })
 
-client.on('login', () => console.log('\n✅✅✅ ВЫ В ИГРЕ! ✅✅✅'))
-client.on('disconnect', (p) => console.log('Kick:', p.reason))
-client.on('error', (e) => console.log('Error:', e))
+client.on('login', () => {
+    console.log('\n✅✅✅ УСПЕХ! ЗАШЛИ НА СЕРВЕР! ✅✅✅\n')
+})
+
+client.on('disconnect', (packet) => {
+    console.log('\n❌ DISCONNECT:', packet.reason?.toString().substring(0, 300))
+    process.exit()
+})
+
+client.on('kick_disconnect', (packet) => {
+    console.log('\n❌ KICKED:', JSON.stringify(packet).substring(0, 300))
+    process.exit()
+})
+
+client.on('error', (err) => {
+    console.log('\n❌ ERROR:', err.message)
+    process.exit()
+})
+
+client.on('end', () => {
+    console.log('\n🔌 DISCONNECTED')
+    process.exit()
+})
+
+setTimeout(() => {
+    console.log('\n⏱️ TIMEOUT')
+    process.exit()
+}, 30000)
