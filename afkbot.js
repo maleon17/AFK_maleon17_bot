@@ -434,57 +434,19 @@ function handlePlayPacket(pkt) {
         return
     }
 
-    // Player Position
-    if (id === 0x3C || id === 0x38) {
-        posX = pkt.readDoubleBE(o); o += 8
-        posY = pkt.readDoubleBE(o); o += 8
-        posZ = pkt.readDoubleBE(o); o += 8
-        yaw = pkt.readFloatBE(o); o += 4
-        pitch = pkt.readFloatBE(o); o += 4
-        const flags = pkt.readUInt8(o); o += 1
-        const teleportIdInfo = readVarInt(pkt, o)
-        
-        if (!teleportIdInfo) {
-            console.log('[POS] ERROR: teleportId is null!')
-            return
-        }
+// Player Position - ПОЛНОСТЬЮ ИГНОРИРУЕМ
+if (id === 0x3C || id === 0x38) {
+    posX = pkt.readDoubleBE(o); o += 8
+    posY = pkt.readDoubleBE(o); o += 8
+    posZ = pkt.readDoubleBE(o); o += 8
+    yaw = pkt.readFloatBE(o); o += 4
+    pitch = pkt.readFloatBE(o); o += 4
     
-        console.log(`[POS] ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)} tid=${teleportIdInfo.value}`)
+    console.log(`[POS] ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)} - IGNORING`)
     
-        // Пробуем БЕЗ Teleport Confirm - только позиция
-        const posBuf = Buffer.alloc(8 * 3 + 4 * 2 + 1)
-        posBuf.writeDoubleBE(posX, 0)
-        posBuf.writeDoubleBE(posY, 8)
-        posBuf.writeDoubleBE(posZ, 16)
-        posBuf.writeFloatBE(yaw, 24)
-        posBuf.writeFloatBE(pitch, 28)
-        posBuf.writeUInt8(1, 32)
-        sendPlayPacket(0x15, posBuf)
-    
-        startPositionUpdates()
-    
-        console.log('[POS] Sent SetPlayerPosRot (without teleport confirm)')
-        return
-    }
-    
-    // Spawn Position
-    if (id === 0x50 || id === 0x4D || id === 0x4C) {
-        console.log('[SPAWN] Default spawn position received')
-        return
-    }
-
-    // Game Event
-    if (id === 0x1c || id === 0x1E || id === 0x20) {
-        const event = pkt.readUInt8(o)
-        console.log(`[GAME_EVENT] ${event}`)
-        return
-    }
-
-    // Player Info
-    if (id === 0x3A || id === 0x36 || id === 0x3B) {
-        console.log('[PLAYER_INFO] received')
-        return
-    }
+    // НЕ ОТПРАВЛЯЕМ ВООБЩЕ НИЧЕГО
+    // Просто сохраняем позицию
+    return
 }
 
 // ===== Подключение =====
