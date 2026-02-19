@@ -317,41 +317,57 @@ function handlePlayPacket(pkt) {
         return
     }
 
-    // Disconnect (0x1A или 0x17)
-    if (id === 0x1A || id === 0x17) {
+    // Plugin Message (0x17) - НЕ кик!
+    if (id === 0x17) {
+        const channel = readString(pkt, o)
+        if (channel) {
+            console.log(`[PLUGIN MSG] ${channel.value}`)
+            
+            // Отвечаем на minecraft:brand
+            if (channel.value === 'minecraft:brand') {
+                const brand = Buffer.from('forge', 'utf8')
+                const brandPacket = Buffer.concat([
+                    writeString('minecraft:brand'),
+                    writeVarInt(brand.length),
+                    brand
+                ])
+                sendPlayPacket(0x0D, brandPacket) // Serverbound Plugin Message
+                console.log('[PLUGIN MSG] Sent brand: forge')
+            }
+        }
+        return
+    }
+
+    // Disconnect (0x1A) - только этот!
+    if (id === 0x1A) {
         const reason = readString(pkt, o)
         log(`❌ Кик: ${reason ? reason.value : 'unknown'}`)
-        log(`Пакет кика (hex): ${pkt.toString('hex')}`)
         sock.destroy()
         return
     }
 
-    // System Chat (0x60)
-    if (id === 0x60 || id === 0x5F) {
+    // System Chat (0x60 или 0x64)
+    if (id === 0x60 || id === 0x64 || id === 0x5F) {
         const msg = readString(pkt, o)
         if (msg) {
             const msgText = msg.value
             console.log('[CHAT]', msgText)
             
-            // Сохраняем в историю (последние 10 сообщений)
             chatHistory.push(msgText)
             if (chatHistory.length > 10) chatHistory.shift()
             
-            // Проверяем разные варианты сообщений
             if (msgText.includes('verify') || msgText.includes('код') || 
                 msgText.includes('code') || msgText.includes('2FA') ||
                 msgText.includes('Verify') || msgText.includes('Code')) {
                 log(`🔐 Нужна верификация!\n\n${msgText}\n\nОтправь: /code XXXXXX`)
             }
             
-            // Успешная верификация
             if (msgText.includes('success') || msgText.includes('успешно') || 
                 msgText.includes('Success') || msgText.includes('verified') ||
                 msgText.includes('Verified')) {
                 log(`✅ Верификация успешна!\n\n${msgText}`)
             }
             
-            // Ошибка верификации
             if (msgText.includes('invalid') || msgText.includes('неверный') ||
                 msgText.includes('Invalid') || msgText.includes('wrong') ||
                 msgText.includes('Wrong') || msgText.includes('incorrect')) {
@@ -361,8 +377,8 @@ function handlePlayPacket(pkt) {
         return
     }
 
-    // Health Update (0x1F или 0x49)
-    if (id === 0x1F || id === 0x49) {
+    // Health Update (0x57 для 1.20.1)
+    if (id === 0x57 || id === 0x1F || id === 0x49) {
         health = pkt.readFloatBE(o); o += 4
         const foodInfo = readVarInt(pkt, o); 
         if (foodInfo) food = foodInfo.value
@@ -374,7 +390,7 @@ function handlePlayPacket(pkt) {
         return
     }
 
-    // Player Position (0x3C или 0x38)
+    // Player Position (0x3C)
     if (id === 0x3C || id === 0x38) {
         posX = pkt.readDoubleBE(o); o += 8
         posY = pkt.readDoubleBE(o); o += 8
@@ -391,20 +407,17 @@ function handlePlayPacket(pkt) {
         
         console.log(`[POS] ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)} tid=${teleportIdInfo.value}`)
         
-        // 1. Confirm Teleportation (0x00)
         sendPlayPacket(0x00, writeVarInt(teleportIdInfo.value))
         
-        // 2. Set Player Position and Rotation (0x15)
         const posBuf = Buffer.alloc(8 * 3 + 4 * 2 + 1)
         posBuf.writeDoubleBE(posX, 0)
         posBuf.writeDoubleBE(posY, 8)
         posBuf.writeDoubleBE(posZ, 16)
         posBuf.writeFloatBE(yaw, 24)
         posBuf.writeFloatBE(pitch, 28)
-        posBuf.writeUInt8(1, 32) // onGround = true
+        posBuf.writeUInt8(1, 32)
         sendPlayPacket(0x15, posBuf)
         
-        // Запускаем периодическую отправку позиции
         startPositionUpdates()
         
         console.log('[POS] Sent TeleportConfirm + SetPlayerPosRot')
@@ -412,26 +425,26 @@ function handlePlayPacket(pkt) {
     }
 
     // Set Default Spawn Position (0x50 или 0x4D)
-    if (id === 0x50 || id === 0x4D) {
+    if (id === 0x50 || id === 0x4D || id === 0x4C) {
         console.log('[SPAWN] Default spawn position received')
         return
     }
 
-    // Game Event (0x1c)
-    if (id === 0x1c) {
+    // Game Event (0x1c или 0x1E)
+    if (id === 0x1c || id === 0x1E || id === 0x20) {
         const event = pkt.readUInt8(o)
         console.log(`[GAME_EVENT] ${event}`)
         return
     }
 
-    // Player Info (0x3A или 0x36) - список игроков
-    if (id === 0x3A || id === 0x36) {
+    // Player Info
+    if (id === 0x3A || id === 0x36 || id === 0x3B) {
         console.log('[PLAYER_INFO] received')
         return
     }
 
-// Логируем неизвестные пакеты
-    if (![0x78, 0x6b, 0x17, 0x0c, 0x34, 0x4d, 0x6d, 0x1c, 0x3d, 0x5a, 0x45, 0x22, 0x5e, 0x50].includes(id)) {
+    // Логируем неизвестные пакеты (кроме частых)
+    if (![0x78, 0x6b, 0x0c, 0x34, 0x4d, 0x6d, 0x3d, 0x5a, 0x45, 0x22, 0x5e, 0x50, 0x4C, 0x52, 0x28, 0x29, 0x2A, 0x2B, 0x27, 0x26, 0x24, 0x25, 0x21, 0x1D, 0x1B, 0x19, 0x18, 0x16, 0x14, 0x13, 0x11, 0x10, 0x0F, 0x0E, 0x0B, 0x0A, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00, 0x51, 0x53, 0x54, 0x55, 0x56, 0x58, 0x59, 0x5B, 0x5C, 0x5D, 0x61, 0x62, 0x63, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6A, 0x6C, 0x6E, 0x6F, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77].includes(id)) {
         console.log(`[UNKNOWN PKT] id=0x${id.toString(16)} len=${pkt.length}`)
     }
 }
