@@ -434,20 +434,20 @@ function handlePlayPacket(pkt) {
         return
     }
 
-// Player Position - ПОЛНОСТЬЮ ИГНОРИРУЕМ
-if (id === 0x3C || id === 0x38) {
-    posX = pkt.readDoubleBE(o); o += 8
-    posY = pkt.readDoubleBE(o); o += 8
-    posZ = pkt.readDoubleBE(o); o += 8
-    yaw = pkt.readFloatBE(o); o += 4
-    pitch = pkt.readFloatBE(o); o += 4
+    // Player Position - ПОЛНОСТЬЮ ИГНОРИРУЕМ
+    if (id === 0x3C || id === 0x38) {
+        posX = pkt.readDoubleBE(o); o += 8
+        posY = pkt.readDoubleBE(o); o += 8
+        posZ = pkt.readDoubleBE(o); o += 8
+        yaw = pkt.readFloatBE(o); o += 4
+        pitch = pkt.readFloatBE(o); o += 4
     
-    console.log(`[POS] ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)} - IGNORING`)
+        console.log(`[POS] ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)} - IGNORING`)
     
-    // НЕ ОТПРАВЛЯЕМ ВООБЩЕ НИЧЕГО
-    // Просто сохраняем позицию
-    return
-}
+        // НЕ ОТПРАВЛЯЕМ ВООБЩЕ НИЧЕГО
+        // Просто сохраняем позицию
+        return
+    }
 
 // ===== Подключение =====
 function connect() {
