@@ -155,8 +155,9 @@ function handleLoginPacket(pkt) {
         isRunning = true
         log('✅ Бот зашёл на сервер! Ожидаю 2FA код...')
 
-        // Подтверждаем login success
-        sendPacket(0x03)
+        // Login Acknowledged — шлём БЕЗ сжатия, вручную
+        const ackPayload = Buffer.from([0x03])
+        sock.write(Buffer.concat([writeVarInt(1), ackPayload]))
         return
     }
 
