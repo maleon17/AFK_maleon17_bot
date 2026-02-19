@@ -309,6 +309,35 @@ function handlePlayPacket(pkt) {
     const id = idInfo.value
     let o = idInfo.length
 
+    // Login (Play) - 0x28 или 0x29 или 0x6b для 1.20.1
+    // ВАЖНО: нужно ответить Client Information
+    if (id === 0x28 || id === 0x29 || id === 0x6b) {
+        console.log('[LOGIN PLAY] Received - sending client settings')
+        
+        // Client Information (0x08)
+        const locale = writeString('ru_ru')
+        const viewDistance = Buffer.from([0x08]) // 8 chunks
+        const chatMode = writeVarInt(0) // enabled
+        const chatColors = Buffer.from([0x01]) // true
+        const skinParts = Buffer.from([0x7F]) // all parts
+        const mainHand = writeVarInt(1) // right
+        const textFiltering = Buffer.from([0x00]) // false
+        const allowServerListings = Buffer.from([0x01]) // true
+        
+        sendPlayPacket(0x08, Buffer.concat([
+            locale,
+            viewDistance,
+            chatMode,
+            chatColors,
+            skinParts,
+            mainHand,
+            textFiltering,
+            allowServerListings
+        ]))
+        console.log('[LOGIN PLAY] Sent client settings')
+        return
+    }
+
     // Keep Alive (0x23 или 0x4e)
     if (id === 0x23 || id === 0x4e) {
         const keepAliveId = pkt.slice(o, o + 8)
@@ -323,9 +352,7 @@ function handlePlayPacket(pkt) {
         if (channel) {
             console.log(`[PLUGIN MSG] ${channel.value}`)
             
-            // Отвечаем на minecraft:brand
             if (channel.value === 'minecraft:brand') {
-                // Формат: channel string + data (без VarInt длины перед данными)
                 const channelBuf = writeString('minecraft:brand')
                 const brandData = writeString('forge')
                 sendPlayPacket(0x0D, Buffer.concat([channelBuf, brandData]))
@@ -440,19 +467,12 @@ function handlePlayPacket(pkt) {
         return
     }
 
-    // Login (Play) - важный пакет!
-    if (id === 0x28 || id === 0x25 || id === 0x26 || id === 0x24) {
-        console.log('[LOGIN PLAY] Received login play packet')
+    // Игнорируем частые пакеты без лога
+    if ([0x78, 0x24, 0x21, 0x22, 0x25, 0x0c, 0x34, 0x6d, 0x3d, 0x5a, 0x45, 0x5e].includes(id)) {
         return
     }
 
-    // Chunk data
-    if (id === 0x78 || id === 0x24 || id === 0x21 || id === 0x22 || id === 0x25) {
-        // игнорируем без лога
-        return
-    }
-
-    // Логируем ВСЕ пакеты для отладки
+    // Логируем остальные пакеты
     console.log(`[PKT] id=0x${id.toString(16)} len=${pkt.length}`)
 }
 
