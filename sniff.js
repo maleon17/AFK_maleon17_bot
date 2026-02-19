@@ -44,60 +44,62 @@ function writeString(str) {
     return Buffer.concat([writeVarInt(buf.length), buf])
 }
 
+// Отправка ответа через fml:loginwrapper
+function sendWrapperResponse(packet, innerChannel, innerPayload) {
+    const channelBuf = Buffer.from(innerChannel, 'utf8')
+    // Формат: [Длина канала][Канал][Данные]
+    const responseData = Buffer.concat([
+        Buffer.from([channelBuf.length]),
+        channelBuf,
+        innerPayload
+    ])
+    
+    client.write('login_plugin_response', {
+        messageId: packet.messageId,
+        success: true,
+        data: responseData
+    })
+    console.log(`[SENT] ${innerChannel} response (${responseData.length} bytes)`)
+}
+
+// Отправка null-ответа (success=false)
+function sendNullResponse(packet) {
+    client.write('login_plugin_response', {
+        messageId: packet.messageId,
+        success: false
+    })
+    console.log(`[SENT] Null response`)
+}
+
 client.on('login_plugin_request', (packet) => {
+    console.log(`\n[REQUEST #${packet.messageId}] Channel: ${packet.channel}`)
+    
+    // packet.data уже содержит данные после названия канала
+    // Для fml:loginwrapper в packet.data будет: [Длина][ВнутреннийКанал][Данные]
+    
     let innerChannel = ''
     let innerData = Buffer.alloc(0)
-
+    
     if (packet.data && packet.data.length > 0) {
         const nameLen = packet.data[0]
-        innerChannel = packet.data.slice(1, 1 + nameLen).toString('utf8')
-        innerData = packet.data.slice(1 + nameLen)
-    }
-
-    console.log(`\n[REQUEST #${packet.messageId}] Channel: ${innerChannel}`)
-
-    // Функция для отправки ответа с флагом успеха
-    function sendSuccess(payload) {
-        // Структура: [Success: 0x01] [ChannelLen] [Channel] [Payload]
-        const channelBuf = Buffer.from(innerChannel, 'utf8')
-        const response = Buffer.concat([
-            Buffer.from([0x01]),          // Success = true
-            Buffer.from([channelBuf.length]), // Длина имени канала
-            channelBuf,                   // Имя канала
-            payload                       // Полезная нагрузка
-        ])
-        
-        client.write('login_plugin_response', { 
-            messageId: packet.messageId, 
-            data: response 
-        })
-        console.log(`[SENT] Success response for ${innerChannel}`)
-    }
-
-    function sendNull() {
-        // Структура: [Success: 0x00] (нет данных дальше)
-        const response = Buffer.from([0x00])
-        client.write('login_plugin_response', { 
-            messageId: packet.messageId, 
-            data: response 
-        })
-        console.log(`[SENT] Null response for ${innerChannel}`)
+        if (nameLen < packet.data.length) {
+            innerChannel = packet.data.slice(1, 1 + nameLen).toString('utf8')
+            innerData = packet.data.slice(1 + nameLen)
+            console.log(`[WRAPPER] Inner channel: ${innerChannel}, DataLen: ${innerData.length}`)
+        }
     }
 
     // === 1. TACZ HANDSHAKE ===
     if (innerChannel === 'tacz:handshake') {
-        // Лог прокси показал ответ: 01 0e ... 01 01
-        // То есть: Success(01) + Len(0e) + "tacz:handshake" + Payload(01 01)
-        // Наш innerData содержит запрос, а нам нужно ответить версией.
-        // В логе прокси ответ был: 01 01 (два байта)
-        sendSuccess(Buffer.from([0x01, 0x01])) 
+        // Из логов прокси: 01 01
+        sendWrapperResponse(packet, 'tacz:handshake', Buffer.from([0x01, 0x01]))
         return
     }
     
     // === 2. TACZTWEAKS HANDSHAKE ===
     if (innerChannel === 'tacztweaks:handshake') {
-        // Аналогично, скорее всего нужен простой байт
-        sendSuccess(Buffer.from([0x01])) 
+        // Из логов: просто 01 (или 01 01?)
+        sendWrapperResponse(packet, 'tacztweaks:handshake', Buffer.from([0x01]))
         return
     }
 
@@ -105,7 +107,7 @@ client.on('login_plugin_request', (packet) => {
     if (innerChannel === 'fml:handshake' && innerData.length > 0) {
         let offset = 0
         
-        // Пропускаем длину пакета (первый VarInt внутри innerData)
+        // Пропускаем длину пакета
         const packetLenInfo = readVarInt(innerData, offset)
         offset += packetLenInfo.length
         
@@ -117,52 +119,18 @@ client.on('login_plugin_request', (packet) => {
         console.log(`[FML] Packet Type: ${type}`)
         
         if (type === 5) {
-            // ЭТО САМОЕ ВАЖНОЕ: ModList
-            // Сервер шлет список своих модов.
-            // Клиент должен ответить списком СВОИХ модов.
-            // Но в логе прокси мы видели, что клиент отвечает ОГРОМНЫМ пакетом (3205 байт),
-            // который содержит не просто список ID, а кучу данных о регистрациях.
+            console.log('[FML] ModList request, generating response...')
             
-            // ПОДОЖДИ. Глянь на лог прокси еще раз.
-            // Запрос #3 (Type 5, список модов сервера).
-            // Ответ клиента: 3205 байт.
-            // Это НЕ просто эхо списка модов. Это полная синхронизация регистров?
-            // Нет, стоп. В FML3 (1.13+) процесс такой:
-            // 1. Server sends ModList (type 5).
-            // 2. Client replies with ITS OWN ModList (type 5).
-            
-            // Почему ответ такой большой? Потому что клиент шлет ВСЕ свои моды (а их много)
-            // в формате: [Count] [ModID] [Version] ...
-            // А запрос сервера был в формате: [Count] [ModID] [DisplayName] [Version] ...
-            
-            // Значит, нам нужно спарсить запрос сервера, взять оттуда список модов,
-            // и отправить обратно ТОЛЬКО ID и VERSION, без DisplayName.
-            // И добавить в конце какие-то флаги?
-            
-            // Давай посмотрим на конец большого пакета в hex:
-            // ... 0c7461637a3a6e6574776f726b05312e302e3400
-            // Заканчивается на 00.
-            
-            // Алгоритм формирования ответа на Type 5:
-            // 1. Пишем Type (5)
-            // 2. Пишем Count модов
-            // 3. Для каждого мода пишем: [ID] [Version] (БЕЗ DisplayName!)
-            // 4. В конце? Возможно пустой список каналов или регистров?
-            
-            // ДАВАЙ ПОПРОБУЕМ сформировать ответ вручную, как в предыдущей попытке,
-            // но теперь обернуть его в sendSuccess().
-            
+            // Парсим список модов сервера (ID, DisplayName, Version)
             const modCountInfo = readVarInt(innerData, offset)
             const modCount = modCountInfo.value
             offset += modCountInfo.length
-            
-            console.log(`[FML] Parsing ${modCount} mods from server...`)
             
             const serverMods = []
             for (let i = 0; i < modCount && offset < innerData.length; i++) {
                 const modId = readString(innerData, offset)
                 offset += modId.totalLength
-                const displayName = readString(innerData, offset) // Пропускаем DisplayName
+                const displayName = readString(innerData, offset) // Пропускаем
                 offset += displayName.totalLength
                 const version = readString(innerData, offset)
                 offset += version.totalLength
@@ -170,10 +138,10 @@ client.on('login_plugin_request', (packet) => {
                 serverMods.push({ id: modId.value, version: version.value })
             }
             
-            // Формируем ответ
+            // Формируем ответ клиента: [Type 5] [Count] [ID][Version]... [0] [0]
             const parts = [
-                writeVarInt(5), // Тип
-                writeVarInt(serverMods.length) // Количество
+                writeVarInt(5),
+                writeVarInt(serverMods.length)
             ]
             
             for (const mod of serverMods) {
@@ -181,29 +149,23 @@ client.on('login_plugin_request', (packet) => {
                 parts.push(writeString(mod.version))
             }
             
-            // В конце лога прокси видим 00. Возможно это количество доп. данных (каналов)?
-            // Попробуем добавить два нуля (пустые списки), как часто бывает в FML
-            parts.push(writeVarInt(0)) // Channels?
-            parts.push(writeVarInt(0)) // Registries?
+            // Два нуля в конце (пустые списки каналов/реестров)
+            parts.push(writeVarInt(0))
+            parts.push(writeVarInt(0))
             
             const payload = Buffer.concat(parts)
-            sendSuccess(payload)
+            sendWrapperResponse(packet, 'fml:handshake', payload)
             return
         }
         
-        // Для остальных типов FML (регистрации и т.д.)
-        // В логе прокси на них отвечали маленьким пакетом: 01 63
-        // 01 = Success, 63 = ? Скорее всего просто байт подтверждения.
-        // Попробуем отправить 0x63 или 0x01.
-        // В логе: Request #4 -> Response 01 63.
-        // Request #5 -> Response 01 63.
-        // Похоже на универсальный ответ "OK".
-        sendSuccess(Buffer.from([0x63]))
+        // Для остальных типов FML отправляем "успех" с минимальными данными
+        // Из логов прокси: 01 63 (или просто подтверждение)
+        sendWrapperResponse(packet, 'fml:handshake', Buffer.from([0x63]))
         return
     }
 
-    // Остальное
-    sendNull()
+    // Всё остальное
+    sendNullResponse(packet)
 })
 
 client.on('login', () => {
