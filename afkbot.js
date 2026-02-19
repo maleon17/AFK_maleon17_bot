@@ -225,11 +225,16 @@ function handlePlayPacket(pkt) {
     const id = idInfo.value
     let o = idInfo.length
 
+    function sendPlay(packetId, ...parts) {
+        const body = Buffer.concat([writeVarInt(packetId), ...parts])
+        const inner = Buffer.concat([writeVarInt(0), body])
+        sock.write(Buffer.concat([writeVarInt(inner.length), inner]))
+    }
+
     // Keep Alive (0x23)
     if (id === 0x23) {
         const keepAliveId = pkt.slice(o, o + 8)
-        // Отвечаем тем же id
-        sendPacket(0x12, keepAliveId)
+        sendPlay(0x12, keepAliveId)
         console.log('[PLAY] Keep-alive pong')
         return
     }
@@ -247,7 +252,6 @@ function handlePlayPacket(pkt) {
         const msg = readString(pkt, o)
         if (msg) {
             console.log('[CHAT]', msg.value)
-            // Проверяем на 2FA
             if (msg.value.includes('verify') || msg.value.includes('код') || msg.value.includes('code') || msg.value.includes('2FA')) {
                 log(`🔐 Нужна верификация!\n\n${msg.value}\n\nОтправь: /code XXXXXX`)
             }
@@ -257,33 +261,27 @@ function handlePlayPacket(pkt) {
 
     // Health Update (0x1F)
     if (id === 0x1F) {
-        // float health, varint food, float foodSaturation
         health = pkt.readFloatBE(o); o += 4
         const foodInfo = readVarInt(pkt, o); food = foodInfo.value
         console.log(`[HEALTH] HP:${health} Food:${food}`)
         if (health <= 0) {
             log('💀 Бот умер! Респаун...')
-            sendPacket(0x09, writeVarInt(0)) // respawn
+            sendPlay(0x09, writeVarInt(0))
         }
         return
     }
 
     // Player Position (0x3C)
-if (id === 0x3C) {
+    if (id === 0x3C) {
         posX = pkt.readDoubleBE(o); o += 8
         posY = pkt.readDoubleBE(o); o += 8
         posZ = pkt.readDoubleBE(o); o += 8
-        o += 4 // yaw float
-        o += 4 // pitch float
-        o += 1 // flags byte
+        o += 4  // yaw
+        o += 4  // pitch
+        o += 1  // flags
         const teleportId = readVarInt(pkt, o)
-        console.log(`[POS] ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)} teleportId=${teleportId.value}`)
-
-        // TeleportConfirm — сжатый пакет: [pktLen][dataLen=0][pktId][teleportId]
-        const tidBuf = writeVarInt(teleportId.value)
-        const pktBody = Buffer.concat([writeVarInt(0x00), tidBuf])
-        const inner = Buffer.concat([writeVarInt(0), pktBody])
-        sock.write(Buffer.concat([writeVarInt(inner.length), inner]))
+        console.log(`[POS] ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)} tid=${teleportId.value}`)
+        sendPlay(0x00, writeVarInt(teleportId.value))
         return
     }
 }
