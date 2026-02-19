@@ -17,62 +17,9 @@ const MOD_LIST_RESPONSE = Buffer.from(
 let fmlCount = 0
 
 client.on('login_plugin_request', (packet) => {
-    let innerChannel = ''
-    if (packet.data && packet.data.length > 0) {
-        const nameLen = packet.data[0]
-        innerChannel = packet.data.slice(1, 1 + nameLen).toString('utf8')
-    }
-
-    console.log(`[#${packet.messageId}] ${innerChannel}`)
-
-    // tacz:handshake — отвечаем просто 0x01 0x01, без канала внутри
-    if (innerChannel === 'tacz:handshake') {
-        console.log(`  -> 0101`)
-        client.write('login_plugin_response', {
-            messageId: packet.messageId,
-            data: Buffer.from([0x01, 0x01])
-        })
-        return
-    }
-
-    // tacztweaks:handshake — НЕ отвечаем
-    if (innerChannel === 'tacztweaks:handshake') {
-        console.log(`  -> NO RESPONSE`)
-        return
-    }
-
-    // fml:handshake
-    if (innerChannel === 'fml:handshake') {
-        fmlCount++
-        console.log(`  -> fml #${fmlCount}`)
-
-        // Первый — пропускаем (это ServerHello, реальный клиент не отвечает)
-        if (fmlCount === 1) {
-            console.log(`    -> skip`)
-            return
-        }
-
-        // Второй — ModList
-        if (fmlCount === 2) {
-            console.log(`    -> ModList`)
-            client.write('login_plugin_response', {
-                messageId: packet.messageId,
-                data: MOD_LIST_RESPONSE
-            })
-            return
-        }
-
-        // Все остальные — ACK
-        console.log(`    -> ACK 0163`)
-        client.write('login_plugin_response', {
-            messageId: packet.messageId,
-            data: Buffer.from([0x01, 0x63])
-        })
-        return
-    }
-
-    // Всё остальное — не отвечаем
-    console.log(`  -> unknown, skip`)
+    console.log(`[#${packet.messageId}] channel field: "${packet.channel}"`)
+    console.log(`  data hex: ${packet.data ? packet.data.toString('hex') : 'null'}`)
+    console.log(`  data length: ${packet.data ? packet.data.length : 0}`)
 })
 
 client.on('login', () => {
