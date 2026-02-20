@@ -4,9 +4,9 @@ const TeleBot = require('telebot')
 
 const HOST = 'game11.gamely.pro'
 const PORT = 24001
-const USERNAME = 'maleon17'
-const TELEGRAM_TOKEN = '8569269930:AAG4WEPomwxNbWrxiIeqZZEkUjv5c6DKA9g'
-const ADMIN_ID = 8480261623
+const USERNAME = ''
+const TELEGRAM_TOKEN = ''
+const ADMIN_ID =
 
 const tbot = new TeleBot(TELEGRAM_TOKEN)
 
@@ -388,37 +388,55 @@ function handlePlayPacket(pkt) {
         return
     }
 
-    // Health
+    // Health (0x57 для 1.20.1)
     if (id === 0x57 || id === 0x1F || id === 0x49) {
-        health = pkt.readFloatBE(o); o += 4
-        const fi = readVarInt(pkt, o)
-        if (fi) food = fi.value
-        console.log(`[HEALTH] HP:${health} Food:${food}`)
-        if (health <= 0) { log('💀 Умер! Респаун...'); sendPlayPacket(0x09, writeVarInt(0)) }
-        return
+        if (pkt.length - o < 4) return; // Минимум для HP
+        health = pkt.readFloatBE(o); o += 4;
+
+        const fi = readVarInt(pkt, o);
+        if (fi) {
+            food = fi.value;
+            o += fi.length;
+        }
+
+        console.log(`[HEALTH] HP:${health} Food:${food}`);
+        if (health <= 0) {
+            log('💀 Умер! Респаун...');
+            sendPlayPacket(0x09, writeVarInt(0));
+        }
+        return;
     }
 
-    // Synchronize Player Position
-    if (id === 0x3C || id === 0x38 || id === 0x39) {
-        posX = pkt.readDoubleBE(o); o += 8
-        posY = pkt.readDoubleBE(o); o += 8
-        posZ = pkt.readDoubleBE(o); o += 8
-        yaw = pkt.readFloatBE(o); o += 4
-        pitch = pkt.readFloatBE(o); o += 4
-        const flags = pkt.readUInt8(o); o += 1
-        const tidInfo = readVarInt(pkt, o)
-        if (!tidInfo) { console.log('[POS] ERROR: no teleportId'); return }
-        const tid = tidInfo.value
-        const remaining = pkt.length - o - tidInfo.length
-        console.log(`[POS] ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)} tid=${tid} remaining=${remaining}`)
+    // Synchronize Player Position (0x3E для 1.20.1)
+    if (id === 0x3E || id === 0x3C || id === 0x38 || id === 0x39) {
+        // Проверка: 3 Double (24) + 2 Float (8) + 1 Byte (1) = 33 байта + VarInt
+        if (pkt.length - o < 34) {
+            console.log(`[POS] Packet too short: ${pkt.length - o} bytes`);
+            return;
+        }
 
-        // Vanilla TeleportConfirm (с teleportId)
-        const confirmBuf = buildPacket(0x00, writeVarInt(tid))
-        console.log(`[POS] TeleportConfirm hex: ${confirmBuf.toString('hex')}`)
-        sock.write(confirmBuf)
+        try {
+            posX = pkt.readDoubleBE(o); o += 8;
+            posY = pkt.readDoubleBE(o); o += 8;
+            posZ = pkt.readDoubleBE(o); o += 8;
+            yaw = pkt.readFloatBE(o); o += 4;
+            pitch = pkt.readFloatBE(o); o += 4;
+            const flags = pkt.readUInt8(o); o += 1;
 
-        startPositionUpdates()
-        return
+            const tidInfo = readVarInt(pkt, o);
+            if (!tidInfo) return;
+            const tid = tidInfo.value;
+
+            console.log(`[POS] Teleport Confirm: ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)} (ID: ${tid})`);
+
+            // Отвечаем пакету подтверждения (Teleport Confirm ID = 0x00 в Play)
+            sendPlayPacket(0x00, writeVarInt(tid));
+
+            startPositionUpdates();
+        } catch (err) {
+            console.log(`[POS] Error parsing: ${err.message}`);
+        }
+        return;
     }
 
     // Spawn Position
