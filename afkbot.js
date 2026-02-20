@@ -2,7 +2,7 @@ const net = require('net')
 const TeleBot = require('telebot')
 
 const HOST = 'game11.gamely.pro'
-const PORT = 30041
+const PORT = 24001
 const USERNAME = 'maleon17'
 const TELEGRAM_TOKEN = '8569269930:AAG4WEPomwxNbWrxiIeqZZEkUjv5c6DKA9g'
 const ADMIN_ID = 8480261623
