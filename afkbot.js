@@ -424,24 +424,6 @@ function handlePlayPacket(pkt) {
          return
     }
         
-        console.log(`[POS] ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)} tid=${teleportIdInfo.value}`)
-        
-        sendPlayPacket(0x00, writeVarInt(teleportIdInfo.value))
-        
-        const posBuf = Buffer.alloc(8 * 3 + 4 * 2 + 1)
-        posBuf.writeDoubleBE(posX, 0)
-        posBuf.writeDoubleBE(posY, 8)
-        posBuf.writeDoubleBE(posZ, 16)
-        posBuf.writeFloatBE(yaw, 24)
-        posBuf.writeFloatBE(pitch, 28)
-        posBuf.writeUInt8(1, 32)
-        sendPlayPacket(0x15, posBuf)
-        
-        startPositionUpdates()
-        
-        console.log('[POS] Sent TeleportConfirm + SetPlayerPosRot')
-        return
-    }
 
     // Spawn Position
     if (id === 0x50 || id === 0x4D || id === 0x4C) {
