@@ -409,6 +409,7 @@ function handlePlayPacket(pkt) {
 
     // Player Position
     if (id === 0x3C || id === 0x38) {
+        console.log('[POS] raw:', pkt.toString('hex')) 
         posX = pkt.readDoubleBE(o); o += 8
         posY = pkt.readDoubleBE(o); o += 8
         posZ = pkt.readDoubleBE(o); o += 8
