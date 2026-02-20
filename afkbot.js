@@ -422,6 +422,7 @@ function handlePlayPacket(pkt) {
             const tidBuf = writeVarInt(teleportId.value)
             const body = Buffer.concat([Buffer.from([0x00]), tidBuf])  // pktId=0x00 + teleportId
             const inner = Buffer.concat([writeVarInt(0), body])        // dataLen=0 (несжатый)
+            console.log('[POS] full packet hex:', Buffer.concat([writeVarInt(inner.length), inner]).toString('hex'))
             sock.write(Buffer.concat([writeVarInt(inner.length), inner]))
             console.log('[POS] TeleportConfirm sent', body.toString('hex'))
         }
