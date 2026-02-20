@@ -409,16 +409,18 @@ function handlePlayPacket(pkt) {
 
     // Player Position
     if (id === 0x3C || id === 0x38) {
-        posX = pkt.readDoubleBE(o); o += 8
-        posY = pkt.readDoubleBE(o); o += 8
-        posZ = pkt.readDoubleBE(o); o += 8
-        yaw = pkt.readFloatBE(o); o += 4
-        pitch = pkt.readFloatBE(o); o += 4
-        const flags = pkt.readUInt8(o); o += 1
-        const teleportIdInfo = readVarInt(pkt, o)
-        
-        if (!teleportIdInfo) {
-            console.log('[POS] ERROR: teleportId is null!')
+            posX = pkt.readDoubleBE(o); o += 8
+            posY = pkt.readDoubleBE(o); o += 8
+            posZ = pkt.readDoubleBE(o); o += 8
+            o += 4  // yaw
+            o += 4  // pitch
+            o += 1  // flags
+            const teleportId = readVarInt(pkt, o)
+            console.log(`[POS] ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)} tid=${teleportId ? teleportId.value : '?'}`)
+            if (teleportId) {
+                sendPlayPacket(0x00, writeVarInt(teleportId.value))
+                console.log('[POS] TeleportConfirm sent')
+            }
             return
         }
         
