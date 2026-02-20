@@ -227,15 +227,22 @@ function handlePlayPacket(pkt) {
     let o = idInfo.length
 
     if (id === 0x28 || id === 0x29 || id === 0x6b) {
-        console.log('[LOGIN PLAY]')
+        console.log('[LOGIN PLAY] Sending settings')
+        // Более корректный Client Information
+        const locale = writeString('en_us')
+        const viewDist = Buffer.from([10])  // 10 chunks
+        const chatMode = writeVarInt(0)      // enabled
+        const chatColors = Buffer.from([0x01]) // true
+        const displayedSkin = Buffer.from([0x7F]) // all parts
+        const mainHand = writeVarInt(1)      // right
+        const enableText = Buffer.from([0x00]) // false
+        const enableListing = Buffer.from([0x01]) // true
+        
         sendPlayPacket(0x08, Buffer.concat([
-            writeString('ru_ru'),
-            Buffer.from([0x08]),
-            writeVarInt(0),
-            Buffer.from([0x01, 0x7F]),
-            writeVarInt(1),
-            Buffer.from([0x00, 0x01])
+            locale, viewDist, chatMode, chatColors,
+            displayedSkin, mainHand, enableText, enableListing
         ]))
+        console.log('[LOGIN PLAY] Settings sent')
         return
     }
 
@@ -253,8 +260,9 @@ function handlePlayPacket(pkt) {
             if (channel.value === 'minecraft:brand') {
                 sendPlayPacket(0x0D, Buffer.concat([
                     writeString('minecraft:brand'),
-                    writeString('forge')
+                    writeString('vanilla')
                 ]))
+                console.log('[PLUGIN] Brand sent')
             }
         }
         return
@@ -292,7 +300,23 @@ function handlePlayPacket(pkt) {
         posX = pkt.readDoubleBE(o); o += 8
         posY = pkt.readDoubleBE(o); o += 8
         posZ = pkt.readDoubleBE(o); o += 8
+        yaw = pkt.readFloatBE(o); o += 4
+        pitch = pkt.readFloatBE(o); o += 4
+        
         console.log(`[POS] ${Math.round(posX)} ${Math.round(posY)} ${Math.round(posZ)}`)
+        
+        // Попробуем отправить хоть что-то - пустой пакет позиции
+        const emptyPos = Buffer.alloc(8 * 3 + 4 * 2 + 1)
+        emptyPos.writeDoubleBE(posX, 0)
+        emptyPos.writeDoubleBE(posY, 8)
+        emptyPos.writeDoubleBE(posZ, 16)
+        emptyPos.writeFloatBE(yaw, 24)
+        emptyPos.writeFloatBE(pitch, 28)
+        emptyPos.writeUInt8(1, 32)
+        
+        sendPlayPacket(0x15, emptyPos)
+        console.log('[POS] Sent position back')
+        
         return
     }
 
