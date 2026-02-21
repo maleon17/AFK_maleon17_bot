@@ -4,9 +4,9 @@ const TeleBot = require('telebot')
 
 const HOST = 'game11.gamely.pro'
 const PORT = 24001
-const USERNAME = 'Dragon_Neba'
-const TELEGRAM_TOKEN = '7479096657:AAF-M8PhxHbVa_4z4BJ6GwopBrV03RjY950'
-const ADMIN_ID = 7698640172
+const USERNAME = ''
+const TELEGRAM_TOKEN = ''
+const ADMIN_ID = 
 
 const tbot = new TeleBot(TELEGRAM_TOKEN)
 
